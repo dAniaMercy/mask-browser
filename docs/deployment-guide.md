@@ -129,10 +129,29 @@ curl http://109.172.101.73/api/health
 cd /opt/mask-browser
 git pull
 cd infra
+# Если были изменения в docker-compose.yml или .env.example
+cp .env.example .env  # Создайте новый .env если его нет
 docker-compose up -d --build
 cd ../server
 dotnet ef database update
 ```
+
+### Запуск опциональных сервисов
+
+**Cloudflare Tunnel** (если настроен):
+```bash
+cd /opt/mask-browser/infra
+# Убедитесь, что CLOUDFLARE_TUNNEL_TOKEN установлен в .env
+docker-compose --profile cloudflare up -d cf_tunnel
+```
+
+**Nginx Load Balancer** (если нужен, вместо существующего):
+```bash
+cd /opt/mask-browser/infra
+docker-compose --profile nginx up -d nginx
+```
+
+⚠️ **ВАЖНО**: Nginx использует порты **8080** и **8443** вместо 80 и 443, чтобы избежать конфликтов!
 
 ### Просмотр логов
 

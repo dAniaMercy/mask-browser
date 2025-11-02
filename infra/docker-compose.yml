@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: maskuser
       POSTGRES_PASSWORD: maskpass123
     ports:
-      - "5432:5432"
+      - "5435:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -30,7 +30,7 @@ services:
       POSTGRES_USER: maskuser
       POSTGRES_PASSWORD: maskpass123
     ports:
-      - "5433:5432"
+      - "5436:5432"
     networks:
       - maskbrowser-network
     depends_on:
@@ -124,7 +124,7 @@ services:
     container_name: maskbrowser-api
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123
+      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123;Pooling=true;Maximum Pool Size=100
       - ConnectionStrings__Redis=redis:6379
       - Jwt__Key=your-super-secret-jwt-key-change-in-production-min-32-chars
       - Jwt__Issuer=MaskBrowser
@@ -213,13 +213,13 @@ services:
       - "com.docker.compose.service=agent"
       - "logging=promtail"
 
-  # Cloudflare Tunnel
+  # Cloudflare Tunnel (optional - only starts if CLOUDFLARE_TUNNEL_TOKEN is set)
   cf_tunnel:
     image: cloudflare/cloudflared:latest
     container_name: maskbrowser-cf-tunnel
     command: tunnel --no-autoupdate run
     environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
     volumes:
       - ./cloudflared-config.yml:/etc/cloudflared/config.yml
     networks:
@@ -228,6 +228,8 @@ services:
       - api
       - web
     restart: unless-stopped
+    profiles:
+      - cloudflare
     labels:
       - "com.docker.compose.service=cf-tunnel"
       - "logging=promtail"
@@ -249,6 +251,24 @@ services:
       - loki
     labels:
       - "com.docker.compose.service=promtail"
+
+  # Alertmanager
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: maskbrowser-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    networks:
+      - maskbrowser-network
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    labels:
+      - "com.docker.compose.service=alertmanager"
+      - "logging=promtail"
 
   # Prometheus Metrics
   prometheus:
@@ -310,19 +330,23 @@ services:
       - maskbrowser-network
     command: -config.file=/etc/loki/local-config.yaml
 
-  # Nginx Load Balancer
+  # Nginx Load Balancer (disabled by default to avoid conflicts with existing nginx)
+  # To enable, use: docker-compose --profile nginx up -d nginx
   nginx:
     image: nginx:alpine
     container_name: maskbrowser-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx-cloudflare.conf:/etc/nginx/nginx-cloudflare.conf:ro
     networks:
       - maskbrowser-network
     depends_on:
       - api
+    profiles:
+      - nginx
 
 volumes:
   postgres_data:

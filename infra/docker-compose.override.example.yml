@@ -1,0 +1,23 @@
+# Пример override файла для локальной настройки
+# Скопируйте этот файл в docker-compose.override.yml и отредактируйте при необходимости
+# docker-compose.override.yml автоматически игнорируется git и не попадает в репозиторий
+
+version: '3.8'
+
+services:
+  # Пример: изменить порт PostgreSQL локально
+  # postgres:
+  #   ports:
+  #     - "5437:5432"
+
+  # Пример: изменить порт API локально
+  # api:
+  #   ports:
+  #     - "5051:8080"
+
+  # Пример: добавить дополнительные переменные окружения
+  # api:
+  #   environment:
+  #     - DEBUG=true
+  #     - LOG_LEVEL=Debug
+

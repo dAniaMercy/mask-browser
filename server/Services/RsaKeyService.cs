@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using Microsoft.IdentityModel.Tokens;
 
 namespace MaskBrowser.Server.Services;
@@ -29,10 +28,10 @@ public class RsaKeyService
             // Try to load existing keys
             if (File.Exists(privateKeyPath) && File.Exists(publicKeyPath))
             {
-                var privateKeyPem = File.ReadAllText(privateKeyPath);
-                var publicKeyPem = File.ReadAllText(publicKeyPath);
+                var existingPrivateKeyPem = File.ReadAllText(privateKeyPath);
+                var existingPublicKeyPem = File.ReadAllText(publicKeyPath);
                 
-                _rsa.ImportFromPem(privateKeyPem);
+                _rsa.ImportFromPem(existingPrivateKeyPem);
                 _logger.LogInformation("RSA keys loaded from files");
                 return;
             }
@@ -45,8 +44,8 @@ public class RsaKeyService
         // Generate new keys
         _rsa.KeySize = 2048;
         
-        var privateKeyPem = _rsa.ExportRSAPrivateKeyPem();
-        var publicKeyPem = _rsa.ExportRSAPublicKeyPem();
+        var newPrivateKeyPem = _rsa.ExportRSAPrivateKeyPem();
+        var newPublicKeyPem = _rsa.ExportRSAPublicKeyPem();
 
         // Ensure directory exists
         var directory = Path.GetDirectoryName(privateKeyPath);
@@ -55,8 +54,8 @@ public class RsaKeyService
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(privateKeyPath, privateKeyPem);
-        File.WriteAllText(publicKeyPath, publicKeyPem);
+        File.WriteAllText(privateKeyPath, newPrivateKeyPem);
+        File.WriteAllText(publicKeyPath, newPublicKeyPem);
 
         _logger.LogInformation("New RSA keys generated and saved");
     }
@@ -91,4 +90,3 @@ public class RsaKeyService
         return _rsa.ExportRSAPublicKeyPem();
     }
 }
-

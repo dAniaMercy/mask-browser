@@ -114,10 +114,9 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
-    public async Task<IActionResult> GetMe()
+    public IActionResult GetMe()
     {
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
-        // Return user info
         return Ok(new { userId });
     }
 }
@@ -140,4 +139,3 @@ public class DisableTwoFactorRequest
 {
     public string Password { get; set; } = string.Empty;
 }
-

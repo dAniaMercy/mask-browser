@@ -37,12 +37,21 @@ builder.Services.AddSingleton<KafkaService>();
 // Docker SDK
 builder.Services.AddSingleton<DockerService>();
 
+// HTTP Client for Cybernetics API
+builder.Services.AddHttpClient<CyberneticsApiService>(client =>
+{
+    var apiUrl = configuration["Cybernetics:ApiUrl"] ?? "https://api.cybernetics.com";
+    client.BaseAddress = new Uri(apiUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
 // Business Services
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LoadBalancerService>();
 builder.Services.AddScoped<CryptoPaymentService>();
 builder.Services.AddScoped<MetricsService>();
+builder.Services.AddScoped<CyberneticsApiService>();
 
 // Background Jobs
 builder.Services.AddHostedService<ContainerMonitorJob>();

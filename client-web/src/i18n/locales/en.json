@@ -1,0 +1,43 @@
+{
+  "common": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "dashboard": "Dashboard",
+    "admin": "Admin Panel",
+    "profiles": "Profiles",
+    "create": "Create",
+    "delete": "Delete",
+    "start": "Start",
+    "stop": "Stop",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "landing": {
+    "title": "MASK BROWSER",
+    "subtitle": "AntiDetect Browser System with Full Anonymity",
+    "features": {
+      "title": "Features",
+      "feature1": "10,000+ simultaneous profiles",
+      "feature2": "Full isolation via Docker",
+      "feature3": "Horizontal scaling",
+      "feature4": "Monitoring and analytics"
+    }
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "username": "Username",
+    "loginTitle": "Login",
+    "registerTitle": "Registration"
+  },
+  "profile": {
+    "title": "Browser Profiles",
+    "create": "Create Profile",
+    "name": "Name",
+    "status": "Status",
+    "node": "Server",
+    "port": "Port"
+  }
+}
+

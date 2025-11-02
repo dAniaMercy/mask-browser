@@ -1,0 +1,12 @@
+*.user
+*.suo
+*.cache
+.vs/
+.vscode/
+node_modules/
+bin/
+obj/
+dist/
+*.log
+.env
+.DS_Store

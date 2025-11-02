@@ -1,0 +1,23 @@
+tunnel: ${CLOUDFLARE_TUNNEL_ID}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # Web application
+  - hostname: ${CLOUDFLARE_DOMAIN}
+    service: http://web:5052
+  
+  # API endpoint
+  - hostname: api.${CLOUDFLARE_DOMAIN}
+    service: http://api:8080
+    originRequest:
+      noHappyEyeballs: true
+  
+  # Metrics (optional, internal)
+  - hostname: metrics.${CLOUDFLARE_DOMAIN}
+    service: http://prometheus:9090
+    originRequest:
+      noHappyEyeballs: true
+  
+  # Catch-all rule
+  - service: http_status:404
+

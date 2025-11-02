@@ -1,0 +1,342 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: maskbrowser-postgres
+    environment:
+      POSTGRES_DB: maskbrowser
+      POSTGRES_USER: maskuser
+      POSTGRES_PASSWORD: maskpass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - maskbrowser-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maskuser"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Replica (for read operations)
+  postgres-replica:
+    image: postgres:15-alpine
+    container_name: maskbrowser-postgres-replica
+    environment:
+      POSTGRES_DB: maskbrowser
+      POSTGRES_USER: maskuser
+      POSTGRES_PASSWORD: maskpass123
+    ports:
+      - "5433:5432"
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - postgres
+    # Note: In production, configure streaming replication
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: maskbrowser-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - maskbrowser-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Zookeeper (for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: maskbrowser-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - maskbrowser-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Apache Kafka
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: maskbrowser-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - maskbrowser-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # RabbitMQ Message Queue (for instant tasks)
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: maskbrowser-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: maskqueue
+      RABBITMQ_DEFAULT_PASS: MaskQueue123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - maskbrowser-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ASP.NET Core API Server
+  api:
+    build:
+      context: ../server
+      dockerfile: ../infra/Dockerfile.server
+    container_name: maskbrowser-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123
+      - ConnectionStrings__Redis=redis:6379
+      - Jwt__Key=your-super-secret-jwt-key-change-in-production-min-32-chars
+      - Jwt__Issuer=MaskBrowser
+      - Jwt__Audience=MaskBrowser
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=maskqueue
+      - RabbitMQ__Password=MaskQueue123
+      - Kafka__BootstrapServers=kafka:29092
+      - Docker__SocketPath=/var/run/docker.sock
+      - ServerIP=109.172.101.73
+      - Cloudflare__Enabled=true
+    ports:
+      - "5050:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - api_logs:/var/log/api
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - rabbitmq
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.docker.compose.service=api"
+      - "logging=promtail"
+
+  # Next.js Web Application
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.nextjs
+    container_name: maskbrowser-web
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api:8080
+      - PORT=5052
+    ports:
+      - "5052:5052"
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5052"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.docker.compose.service=web"
+      - "logging=promtail"
+
+  # Agent Service (Browser Container Manager)
+  agent:
+    build:
+      context: ../agent
+      dockerfile: ../infra/Dockerfile.agent
+    container_name: maskbrowser-agent
+    environment:
+      - API_URL=http://api:8080
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - KAFKA_BROKERS=kafka:29092
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=maskqueue
+      - RABBITMQ_PASS=MaskQueue123
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - agent_logs:/var/log/agent
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - api
+      - kafka
+      - rabbitmq
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "com.docker.compose.service=agent"
+      - "logging=promtail"
+
+  # Cloudflare Tunnel
+  cf_tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: maskbrowser-cf-tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared-config.yml:/etc/cloudflared/config.yml
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+    labels:
+      - "com.docker.compose.service=cf-tunnel"
+      - "logging=promtail"
+
+  # Promtail (Log Collector for Loki)
+  promtail:
+    image: grafana/promtail:latest
+    container_name: maskbrowser-promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - api_logs:/var/log/api:ro
+      - agent_logs:/var/log/agent:ro
+      - /var/log:/var/log:ro
+    networks:
+      - maskbrowser-network
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    labels:
+      - "com.docker.compose.service=promtail"
+
+  # Prometheus Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: maskbrowser-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts.yml:/etc/prometheus/alerts/alerts.yml
+      - prometheus_data:/prometheus
+    networks:
+      - maskbrowser-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - alertmanager
+    labels:
+      - "com.docker.compose.service=prometheus"
+      - "logging=promtail"
+
+  # Grafana Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: maskbrowser-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=http://109.172.101.73:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - prometheus
+      - loki
+    labels:
+      - "com.docker.compose.service=grafana"
+      - "logging=promtail"
+
+  # Loki Log Aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: maskbrowser-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    networks:
+      - maskbrowser-network
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: maskbrowser-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  alertmanager_data:
+  api_logs:
+  agent_logs:
+
+networks:
+  maskbrowser-network:
+    driver: bridge
+

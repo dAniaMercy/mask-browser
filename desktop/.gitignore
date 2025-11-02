@@ -1,0 +1,11 @@
+bin/
+obj/
+*.user
+*.suo
+*.cache
+.vs/
+.vscode/
+*.dll
+*.pdb
+packages/
+

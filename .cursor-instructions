@@ -1,0 +1,172 @@
+# =====================================================
+# PROJECT: MASK BROWSER — AntiDetect Browser System (High-Load)
+# =====================================================
+project:
+  name: "MASK BROWSER"
+  description: >
+    MASK BROWSER — это распределённая антидетект-система с полной анонимностью,
+    масштабируемой архитектурой, и возможностью управления браузерными профилями,
+    запущенными в изолированных Docker-контейнерах.  
+    Первый сервер с IP 109.172.101.73 используется как центральная нода:
+    API, веб-интерфейс, брокеры сообщений (Kafka + RabbitMQ), балансировщик нагрузки,
+    мониторинг и управление другими нодами.  
+    Проект должен быть готов к колоссальной нагрузке (10 000+ одновременных профилей)
+    и уметь автоматически распределять задачи и контейнеры между серверами.
+
+# =====================================================
+# BASE SERVER CONFIGURATION (FIRST NODE)
+# =====================================================
+server:
+  main_ip: "109.172.101.73"
+  os: "Ubuntu 22.04 LTS"
+  roles:
+    - api_gateway
+    - load_balancer
+    - auth_service
+    - kafka_broker
+    - rabbitmq_broker
+    - prometheus_node
+    - grafana_dashboard
+    - docker_manager
+  description: >
+    Основной сервер управляет остальными нодами.  
+    Через API он добавляет новые узлы, проверяет их состояние (health-check),
+    распределяет профили и контейнеры, а также собирает метрики и логи.
+
+# =====================================================
+# STACK
+# =====================================================
+stack:
+  backend: "ASP.NET Core 8 + EF Core + Dapper + PostgreSQL + Redis + Kafka + RabbitMQ + Docker SDK"
+  frontend: "React + TypeScript + TailwindCSS + i18next (RU/EN)"
+  desktop: "C# WPF + Chromium Embedded Framework (CEF)"
+  monitoring: "Prometheus + Grafana + Loki"
+  orchestration: "Docker + Docker Compose + Cybernetics API + Auto-scaling"
+  payments: "CryptoBot (Telegram) + Bybit API"
+
+# =====================================================
+# DEPLOYMENT & SETUP INSTRUCTIONS (STEP BY STEP)
+# =====================================================
+deployment_steps:
+  - step: "1. Подключение к серверу"
+    commands: |
+      ssh root@109.172.101.73
+      apt update && apt upgrade -y
+      apt install -y git curl ufw docker.io docker-compose nginx net-tools
+
+  - step: "2. Настройка портов и безопасности"
+    commands: |
+      ufw allow 22
+      ufw allow 80
+      ufw allow 443
+      ufw allow 5050
+      ufw allow 5052
+      ufw allow 9090
+      ufw allow 3000
+      ufw allow 9092 # Kafka
+      ufw allow 5672 # RabbitMQ
+      ufw enable
+
+  - step: "3. Клонирование проекта и настройка окружения"
+    commands: |
+      cd /opt
+      git clone https://github.com/<your_repo>/mask-browser.git
+      cd mask-browser
+      touch .env
+    env_file: |
+      POSTGRES_USER=maskadmin
+      POSTGRES_PASSWORD=SuperSecurePass!
+      POSTGRES_DB=maskbrowser
+      REDIS_PASSWORD=MaskRedis123
+      JWT_SECRET=superlongsecretjwtstring
+      SERVER_IP=109.172.101.73
+      KAFKA_BROKER=109.172.101.73:9092
+      RABBITMQ_HOST=109.172.101.73
+      RABBITMQ_USER=maskqueue
+      RABBITMQ_PASS=MaskQueue123
+
+  - step: "4. Сборка контейнеров"
+    commands: |
+      docker-compose up -d --build
+      docker ps
+
+  - step: "5. Настройка Nginx"
+    file: "/etc/nginx/sites-available/mask-browser.conf"
+    content: |
+      server {
+          listen 80;
+          server_name 109.172.101.73;
+          location / {
+              proxy_pass http://localhost:5052;
+          }
+          location /api/ {
+              proxy_pass http://localhost:5050/;
+          }
+          location /metrics {
+              proxy_pass http://localhost:9090/;
+          }
+      }
+    commands_after: |
+      ln -s /etc/nginx/sites-available/mask-browser.conf /etc/nginx/sites-enabled/
+      nginx -t
+      systemctl restart nginx
+
+  - step: "6. Проверка API и интерфейсов"
+    tests: |
+      curl http://109.172.101.73/api/health
+      # -> {"status":"OK"}
+      http://109.172.101.73         # Сайт
+      http://109.172.101.73:3000    # Grafana
+      http://109.172.101.73:9090    # Prometheus
+
+  - step: "7. Настройка Kafka и RabbitMQ"
+    kafka: |
+      docker exec -it maskbrowser_kafka bash
+      kafka-topics.sh --create --topic profile-events --bootstrap-server localhost:9092
+      kafka-topics.sh --create --topic container-logs --bootstrap-server localhost:9092
+    rabbitmq: |
+      docker exec -it maskbrowser_rabbitmq bash
+      rabbitmqctl add_user maskqueue MaskQueue123
+      rabbitmqctl set_permissions -p / maskqueue ".*" ".*" ".*"
+
+  - step: "8. Добавление новых серверов (автомасштабирование)"
+    description: >
+      Каждый новый сервер должен иметь Docker и Docker Compose.
+      После установки он подключается через API главного узла:
+      POST /api/servers/register
+      {
+        "ip": "NEW_SERVER_IP",
+        "capacity": 1000,
+        "role": "node"
+      }
+      LoadBalancerService начнёт распределять профили между серверами автоматически.
+
+# =====================================================
+# HIGH-LOAD ARCHITECTURE REQUIREMENTS
+# =====================================================
+requirements:
+  performance:
+    - "10 000+ одновременно активных контейнеров"
+    - "Kafka используется для логов и аналитики контейнеров"
+    - "RabbitMQ используется для мгновенных задач (создание, удаление профилей)"
+    - "Redis — для кеша и хранения сессий"
+  security:
+    - "JWT + Argon2 + AES256"
+    - "Изоляция каждого профиля в контейнере"
+  monitoring:
+    - "Prometheus метрики, Grafana дашборды, Loki логи"
+  scaling:
+    - "Kubernetes-ready, auto node registration via Cybernetics API"
+    - "LoadBalancerService перераспределяет нагрузку при пиках"
+
+# =====================================================
+# OUTPUT
+# =====================================================
+output:
+  - "Cursor должен создать полную структуру проекта (server, client, desktop, infra)"
+  - "Сгенерировать docker-compose.yml с Kafka, RabbitMQ, Redis, PostgreSQL, Prometheus, Grafana"
+  - "Создать инструкции по деплою (README.md)"
+  - "Сформировать health-check endpoint /api/health"
+  - "Добавить LoadBalancerService с поддержкой Kafka и RabbitMQ"
+  - "Настроить мониторинг на IP 109.172.101.73"
+  - "После деплоя проект должен быть полностью рабочим и доступным по IP 109.172.101.73"

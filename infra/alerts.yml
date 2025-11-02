@@ -1,0 +1,84 @@
+groups:
+  - name: maskbrowser_alerts
+    interval: 30s
+    rules:
+      # High container count
+      - alert: HighContainerCount
+        expr: maskbrowser_containers_active > 9000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High container count detected"
+          description: "Container count is {{ $value }}, approaching limit of 10000"
+
+      # API server down
+      - alert: APIServerDown
+        expr: up{job="api-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API server is down"
+          description: "API server has been down for more than 1 minute"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: avg(container_cpu_usage_seconds_total) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "Average CPU usage is {{ $value | humanizePercentage }}"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: avg(container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Average memory usage is {{ $value | humanizePercentage }}"
+
+      # Database connection issues
+      - alert: DatabaseConnectionIssues
+        expr: pg_stat_database_numbackends > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connections"
+          description: "Number of database connections: {{ $value }}"
+
+      # Redis connection issues
+      - alert: RedisConnectionIssues
+        expr: redis_connected_clients > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Redis connections"
+          description: "Number of Redis connections: {{ $value }}"
+
+      # Kafka lag
+      - alert: KafkaLag
+        expr: kafka_consumer_lag_sum > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Kafka consumer lag: {{ $value }}"
+
+      # Node unhealthy
+      - alert: NodeUnhealthy
+        expr: up{job="node-exporter"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Server node is unhealthy"
+          description: "Server node has been down for more than 5 minutes"
+

@@ -1,0 +1,56 @@
+{
+  "common": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "dashboard": "Dashboard",
+    "admin": "Admin Panel",
+    "profiles": "Profiles",
+    "create": "Create",
+    "delete": "Delete",
+    "start": "Start",
+    "stop": "Stop",
+    "cancel": "Cancel",
+    "save": "Save",
+    "settings": "Settings",
+    "theme": "Theme",
+    "language": "Language"
+  },
+  "landing": {
+    "title": "MASK BROWSER",
+    "subtitle": "AntiDetect Browser System with Full Anonymity",
+    "features": {
+      "title": "Features",
+      "feature1": "10,000+ simultaneous profiles",
+      "desc1": "System handles extreme loads",
+      "feature2": "Full isolation via Docker",
+      "desc2": "Each profile runs in a separate container",
+      "feature3": "Horizontal scaling",
+      "desc3": "Automatic load distribution",
+      "feature4": "Monitoring and analytics",
+      "desc4": "Prometheus, Grafana and Loki for tracking",
+      "feature5": "Security and protection",
+      "desc5": "Cloudflare WAF, HTTPS, 2FA",
+      "feature6": "Multilingual",
+      "desc6": "Russian and English support"
+    }
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "username": "Username",
+    "loginTitle": "Login",
+    "registerTitle": "Registration",
+    "twoFactor": "Two-Factor Authentication",
+    "enterCode": "Enter code from app"
+  },
+  "profile": {
+    "title": "Browser Profiles",
+    "create": "Create Profile",
+    "name": "Name",
+    "status": "Status",
+    "node": "Server",
+    "port": "Port"
+  }
+}
+

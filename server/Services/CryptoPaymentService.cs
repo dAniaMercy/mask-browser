@@ -1,17 +1,19 @@
 using System.Net.Http.Json;
-using MaskBrowser.Server.Models;
 
 namespace MaskBrowser.Server.Services;
 
 public class CryptoPaymentService
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CryptoPaymentService> _logger;
 
-    public CryptoPaymentService(HttpClient httpClient, IConfiguration configuration, ILogger<CryptoPaymentService> logger)
+    public CryptoPaymentService(
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        ILogger<CryptoPaymentService> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
     }
@@ -26,10 +28,11 @@ public class CryptoPaymentService
 
         try
         {
-            _httpClient.DefaultRequestHeaders.Add("Crypto-Pay-API-Token", apiKey);
-            var response = await _httpClient.GetAsync(
-                $"{_configuration["CryptoPayments:CryptoBot:ApiUrl"]}/getInvoices?invoice_ids={invoiceId}"
-            );
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.DefaultRequestHeaders.Add("Crypto-Pay-API-Token", apiKey);
+            
+            var apiUrl = _configuration["CryptoPayments:CryptoBot:ApiUrl"] ?? "https://pay.crypt.bot/api";
+            var response = await httpClient.GetAsync($"{apiUrl}/getInvoices?invoice_ids={invoiceId}");
 
             if (response.IsSuccessStatusCode)
             {
@@ -65,4 +68,3 @@ public class CryptoPaymentService
         public decimal Amount { get; set; }
     }
 }
-

@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.Extensions.Logging;
-using System.Text;
 using MaskBrowser.Server.Infrastructure;
 using MaskBrowser.Server.Services;
 using MaskBrowser.Server.BackgroundJobs;
@@ -14,7 +12,12 @@ var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
 // Add services
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = null;
+    });
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -45,28 +48,34 @@ builder.Services.AddHttpClient<CyberneticsApiService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// HTTP Client Factory for services
+builder.Services.AddHttpClient();
+
+// RSA Key Service (must be singleton and initialized early)
+builder.Services.AddSingleton<RsaKeyService>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger<RsaKeyService>();
+    return new RsaKeyService(config, logger);
+});
+
+// TOTP Service
+builder.Services.AddSingleton<TotpService>();
+
 // Business Services
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LoadBalancerService>();
 builder.Services.AddScoped<CryptoPaymentService>();
-builder.Services.AddScoped<MetricsService>();
+builder.Services.AddSingleton<IMetricsService, MetricsService>();
 builder.Services.AddScoped<CyberneticsApiService>();
 
 // Background Jobs
 builder.Services.AddHostedService<ContainerMonitorJob>();
 builder.Services.AddHostedService<SessionCleanupJob>();
 
-// RSA Key Service
-var rsaKeyService = new RsaKeyService(configuration, 
-    LoggerFactory.Create(b => b.AddConsole()).CreateLogger<RsaKeyService>());
-builder.Services.AddSingleton(rsaKeyService);
-
-// TOTP Service
-builder.Services.AddSingleton<TotpService>();
-
 // JWT Authentication with RSA256
-var publicKey = rsaKeyService.GetPublicKey();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -78,7 +87,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = configuration["Jwt:Issuer"],
             ValidAudience = configuration["Jwt:Audience"],
-            IssuerSigningKey = publicKey
+            IssuerSigningKey = null // Will be set in middleware
+        };
+        
+        // Set the public key dynamically
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var rsaKeyService = context.HttpContext.RequestServices.GetRequiredService<RsaKeyService>();
+                context.Options.TokenValidationParameters.IssuerSigningKey = rsaKeyService.GetPublicKey();
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -95,9 +115,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Prometheus Metrics
-builder.Services.AddSingleton<IMetricsService, MetricsService>();
-
 // Health Checks
 builder.Services.AddHealthChecks()
     .AddNpgSql(configuration.GetConnectionString("PostgreSQL")!)
@@ -105,9 +122,8 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// Prometheus endpoint
+// Prometheus metrics
 app.UseHttpMetrics();
-app.UseGrpcMetrics();
 app.MapMetrics();
 
 // Configure the HTTP request pipeline
@@ -126,5 +142,7 @@ app.MapControllers();
 // Health check endpoint
 app.MapHealthChecks("/health");
 
-app.Run();
+// Simple health endpoint
+app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
+app.Run();

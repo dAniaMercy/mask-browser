@@ -12,11 +12,11 @@ export function middleware(request: NextRequest) {
     'https://109.172.101.73',
     'https://yourdomain.com', // Замените на ваш домен
     process.env.NEXT_PUBLIC_API_URL,
-  ];
+  ].filter((url): url is string => url !== undefined); // Фильтруем undefined
 
   // Для API запросов проверяем Origin
   if (request.nextUrl.pathname.startsWith('/api/proxy')) {
-    if (origin && !allowedOrigins.some(allowed => origin.includes(allowed))) {
+    if (origin && !allowedOrigins.some(allowed => allowed && origin.includes(allowed))) {
       return NextResponse.json(
         { error: 'Invalid origin' },
         { status: 403 }
@@ -53,4 +53,3 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };
-

@@ -19,7 +19,7 @@ rule_files:
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['109.172.101.73:9090']
 
   - job_name: 'api-server'
     static_configs:

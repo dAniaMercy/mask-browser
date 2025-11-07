@@ -22,7 +22,7 @@ interface AuthState {
   logout: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050';
 
 export const useAuthStore = create<AuthState>()(
   persist(

@@ -35,7 +35,7 @@ interface ProfileState {
   deleteProfile: (id: number) => Promise<void>
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5050'
+const API_URL = import.meta.env.VITE_API_URL || 'http://109.172.101.73:5050'
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
   profiles: [],

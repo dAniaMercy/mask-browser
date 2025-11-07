@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
 
   // Разрешенные origins
   const allowedOrigins = [
-    'http://localhost:5052',
+    'http://109.172.101.73:5052',
     'https://109.172.101.73',
     'https://yourdomain.com', // Замените на ваш домен
     process.env.NEXT_PUBLIC_API_URL,

@@ -111,22 +111,22 @@ docker-compose down -v
 
 1. API Health Check:
 ```bash
-curl http://localhost:5050/health
+curl http://109.172.101.73:5050/health
 ```
 
 2. Веб-интерфейс:
 ```bash
-curl http://localhost:5052
+curl http://109.172.101.73:5052
 ```
 
 3. Prometheus:
 ```bash
-curl http://localhost:9090/-/healthy
+curl http://109.172.101.73:9090/-/healthy
 ```
 
 4. Grafana:
 ```bash
-curl http://localhost:3000/api/health
+curl http://109.172.101.73:3000/api/health
 ```
 
 ## Troubleshooting

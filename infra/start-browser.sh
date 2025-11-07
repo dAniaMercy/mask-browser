@@ -2,7 +2,7 @@
 
 PROFILE_ID=${PROFILE_ID:-1}
 CONFIG=${CONFIG:-'{}'}
-NODE_IP=${NODE_IP:-localhost}
+NODE_IP=${NODE_IP:-109.172.101.73}
 
 # Start Xvfb
 export DISPLAY=:99
@@ -12,10 +12,10 @@ Xvfb :99 -screen 0 1920x1080x24 &
 fluxbox &
 
 # Start VNC server
-x11vnc -display :99 -nopw -listen localhost -xkb -forever -shared &
+x11vnc -display :99 -nopw -listen 109.172.101.73 -xkb -forever -shared &
 
 # Start websockify for web access
-websockify --web=/usr/share/novnc 6080 localhost:5900 &
+websockify --web=/usr/share/novnc 6080 109.172.101.73:5900 &
 
 # Start Chromium with profile
 mkdir -p /tmp/profile-${PROFILE_ID}

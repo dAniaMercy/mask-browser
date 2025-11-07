@@ -77,8 +77,8 @@ dotnet ef database update
 5. **Настройка Kafka топиков:**
 ```bash
 docker exec -it maskbrowser-kafka bash
-kafka-topics.sh --create --topic profile-events --bootstrap-server localhost:9092
-kafka-topics.sh --create --topic container-logs --bootstrap-server localhost:9092
+kafka-topics.sh --create --topic profile-events --bootstrap-server 109.172.101.73:9092
+kafka-topics.sh --create --topic container-logs --bootstrap-server 109.172.101.73:9092
 exit
 ```
 

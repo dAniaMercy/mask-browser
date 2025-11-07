@@ -97,13 +97,13 @@ deployment_steps:
           listen 80;
           server_name 109.172.101.73;
           location / {
-              proxy_pass http://localhost:5052;
+              proxy_pass http://109.172.101.73:5052;
           }
           location /api/ {
-              proxy_pass http://localhost:5050/;
+              proxy_pass http://109.172.101.73:5050/;
           }
           location /metrics {
-              proxy_pass http://localhost:9090/;
+              proxy_pass http://109.172.101.73:9090/;
           }
       }
     commands_after: |
@@ -122,8 +122,8 @@ deployment_steps:
   - step: "7. Настройка Kafka и RabbitMQ"
     kafka: |
       docker exec -it maskbrowser_kafka bash
-      kafka-topics.sh --create --topic profile-events --bootstrap-server localhost:9092
-      kafka-topics.sh --create --topic container-logs --bootstrap-server localhost:9092
+      kafka-topics.sh --create --topic profile-events --bootstrap-server 109.172.101.73:9092
+      kafka-topics.sh --create --topic container-logs --bootstrap-server 109.172.101.73:9092
     rabbitmq: |
       docker exec -it maskbrowser_rabbitmq bash
       rabbitmqctl add_user maskqueue MaskQueue123

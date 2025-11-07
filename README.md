@@ -190,8 +190,8 @@ curl http://109.172.101.73/api/health
 **Kafka:**
 ```bash
 docker exec -it maskbrowser-kafka bash
-kafka-topics.sh --create --topic profile-events --bootstrap-server localhost:9092
-kafka-topics.sh --create --topic container-logs --bootstrap-server localhost:9092
+kafka-topics.sh --create --topic profile-events --bootstrap-server 109.172.101.73:9092
+kafka-topics.sh --create --topic container-logs --bootstrap-server 109.172.101.73:9092
 ```
 
 **RabbitMQ:**
@@ -228,12 +228,12 @@ cd infra
 docker-compose up -d
 cd ../server
 dotnet run --project MaskBrowser.Server.csproj
-# API доступно на http://localhost:5050
+# API доступно на http://109.172.101.73:5050
 
 cd ../client-web
 npm install
 npm run dev
-# Frontend доступен на http://localhost:5052
+# Frontend доступен на http://109.172.101.73:5052
 ```
 
 ## 📖 Использование
@@ -249,7 +249,7 @@ npm run dev
 
 **Регистрация:**
 ```bash
-curl -X POST http://localhost:5050/api/auth/register \
+curl -X POST http://109.172.101.73:5050/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "testuser",
@@ -260,7 +260,7 @@ curl -X POST http://localhost:5050/api/auth/register \
 
 **Создание профиля:**
 ```bash
-curl -X POST http://localhost:5050/api/profile \
+curl -X POST http://109.172.101.73:5050/api/profile \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -309,18 +309,18 @@ RABBITMQ_PASS=guest
 
 ### Grafana
 
-Доступен на `http://localhost:3000`
+Доступен на `http://109.172.101.73:3000`
 - Логин: `admin`
 - Пароль: `admin`
 
 ### Prometheus
 
-Метрики доступны на `http://localhost:9090`
+Метрики доступны на `http://109.172.101.73:9090`
 
 ### Prometheus метрики API
 
 ```bash
-curl http://localhost:5050/metrics
+curl http://109.172.101.73:5050/metrics
 ```
 
 ## 🔒 Безопасность

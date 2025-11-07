@@ -26,7 +26,7 @@ docker-compose up -d --scale api=3
 1. **Регистрация новой ноды через API**
 
 ```bash
-curl -X POST http://localhost:5050/api/server/register \
+curl -X POST http://109.172.101.73:5050/api/server/register \
   -H "Content-Type: application/json" \
   -d '{
     "name": "node-2",

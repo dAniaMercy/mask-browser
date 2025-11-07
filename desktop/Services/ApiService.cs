@@ -9,7 +9,7 @@ namespace MaskBrowser.Desktop.Services
     public class ApiService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _apiUrl = "http://localhost:5050/api";
+        private readonly string _apiUrl = "http://109.172.101.73:5050/api";
         private string? _token;
 
         public ApiService()

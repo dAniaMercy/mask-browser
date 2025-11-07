@@ -34,7 +34,7 @@ dotnet ef database update
 ### 1. Включение 2FA
 
 ```bash
-curl -X POST http://localhost:5050/api/auth/two-factor/enable \
+curl -X POST http://109.172.101.73:5050/api/auth/two-factor/enable \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -51,7 +51,7 @@ curl -X POST http://localhost:5050/api/auth/two-factor/enable \
 
 ```bash
 # Первый запрос (требуется 2FA)
-curl -X POST http://localhost:5050/api/auth/login \
+curl -X POST http://109.172.101.73:5050/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -60,7 +60,7 @@ curl -X POST http://localhost:5050/api/auth/login \
 # Ответ: 426 (Two-factor authentication required)
 
 # Второй запрос (с кодом 2FA)
-curl -X POST http://localhost:5050/api/auth/login \
+curl -X POST http://109.172.101.73:5050/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",

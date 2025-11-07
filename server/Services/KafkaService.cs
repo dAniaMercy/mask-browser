@@ -13,7 +13,7 @@ public class KafkaService : IDisposable
     public KafkaService(IConfiguration configuration, ILogger<KafkaService> logger)
     {
         _logger = logger;
-        _bootstrapServers = configuration["Kafka:BootstrapServers"] ?? "localhost:9092";
+        _bootstrapServers = configuration["Kafka:BootstrapServers"] ?? "109.172.101.73:9092";
 
         var producerConfig = new ProducerConfig
         {

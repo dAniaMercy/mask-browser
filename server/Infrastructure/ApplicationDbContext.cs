@@ -25,7 +25,6 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.Username).IsUnique();
-            entity.Property(e => e.TwoFactorRecoveryCodes).HasColumnType("text");
         });
 
         // BrowserProfile configuration
@@ -36,12 +35,6 @@ public class ApplicationDbContext : DbContext
             entity.HasOne(e => e.User)
                   .WithMany(u => u.BrowserProfiles)
                   .HasForeignKey(e => e.UserId);
-            
-            // Store BrowserConfig as JSON
-            entity.OwnsOne(e => e.Config, config =>
-            {
-                config.ToJson();
-            });
         });
 
         // ServerNode configuration
@@ -71,3 +64,4 @@ public class ApplicationDbContext : DbContext
         });
     }
 }
+

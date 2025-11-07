@@ -2,6 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  i18n: {
+    locales: ['ru', 'en'],
+    defaultLocale: 'ru',
+    localeDetection: true,
+  },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050',
   },
@@ -9,10 +14,11 @@ const nextConfig = {
     return [
       {
         source: '/api/proxy/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050'}/api/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL}/api/:path*`,
       },
     ];
   },
+  // Security headers
   async headers() {
     return [
       {
@@ -41,3 +47,4 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
+

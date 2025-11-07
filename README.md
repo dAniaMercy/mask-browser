@@ -112,7 +112,7 @@ ufw enable
 
 ```bash
 cd /opt
-git clone https://github.com/https://github.com/dAniaMercy/mask-browser.git
+git clone https://github.com/<your_repo>/mask-browser.git
 cd mask-browser
 touch .env
 ```

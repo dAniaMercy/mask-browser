@@ -9,7 +9,7 @@ interface User {
   username: string;
   email: string;
   isAdmin?: boolean;
-  twoFactorEnabled?: boolean; // Добавлено поле
+  requires2FA?: boolean;
 }
 
 interface AuthState {
@@ -88,3 +88,4 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+

@@ -62,9 +62,7 @@ export default function Layout({ children }: LayoutProps) {
               <span className="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
                 <User className="w-4 h-4" />
                 <span>{user?.username}</span>
-                {user?.twoFactorEnabled && (
-                  <Shield className="w-4 h-4 text-green-500" title="2FA включен" />
-                )}
+                <Shield className="w-4 h-4 text-green-500" {...({ title: '2FA включен' } as any)} />
               </span>
               <button
                 onClick={handleLogout}

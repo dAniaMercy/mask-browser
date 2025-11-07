@@ -16,7 +16,7 @@ export function middleware(request: NextRequest) {
 
   // Для API запросов проверяем Origin
   if (request.nextUrl.pathname.startsWith('/api/proxy')) {
-    if (origin && !allowedOrigins.some(allowed => origin.includes(allowed))) {
+    if (origin && !allowedOrigins.some(allowed => (origin ?? '').includes(allowed))) {
       return NextResponse.json(
         { error: 'Invalid origin' },
         { status: 403 }

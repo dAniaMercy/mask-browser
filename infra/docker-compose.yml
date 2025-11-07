@@ -136,11 +136,12 @@ services:
       - Docker__SocketPath=/var/run/docker.sock
       - ServerIP=109.172.101.73
       - Cloudflare__Enabled=true
+      - DOCKER_HOST=unix:///var/run/docker.sock
     ports:
       - "5050:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - api_logs:/var/log/api
+      - ./logs/api:/app/logs
     networks:
       - maskbrowser-network
     depends_on:

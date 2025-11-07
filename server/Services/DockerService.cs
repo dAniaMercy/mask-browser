@@ -12,15 +12,41 @@ public class DockerService
     private readonly ILogger<DockerService> _logger;
 
     public DockerService(IConfiguration configuration, ILogger<DockerService> logger)
-    {
-        _configuration = configuration;
-        _logger = logger;
+{
+    _configuration = configuration;
+    _logger = logger;
 
-        var dockerConfig = new DockerClientConfiguration(
-            new Uri(_configuration["Docker:SocketPath"] ?? "unix:///var/run/docker.sock")
-        );
+    string? socketPath = _configuration["Docker:SocketPath"] ?? Environment.GetEnvironmentVariable("DOCKER_HOST");
+
+    // 🧩 Автоопределение сокета
+    if (string.IsNullOrEmpty(socketPath))
+    {
+        if (OperatingSystem.IsWindows())
+            socketPath = "npipe://./pipe/docker_engine";
+        else
+            socketPath = "unix:///var/run/docker.sock";
+    }
+
+    // 🧹 Если путь не содержит схему — добавляем её
+    if (!socketPath.Contains("://"))
+        socketPath = $"unix://{socketPath}";
+
+    // 🧹 Меняем ошибочную file:// на unix://
+    if (socketPath.StartsWith("file://"))
+        socketPath = socketPath.Replace("file://", "unix://");
+
+    try
+    {
+        _logger.LogInformation("Connecting to Docker at {SocketPath}", socketPath);
+        var dockerConfig = new DockerClientConfiguration(new Uri(socketPath));
         _dockerClient = dockerConfig.CreateClient();
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Failed to initialize Docker client with path: {SocketPath}", socketPath);
+        throw;
+    }
+}
 
     public async Task<string> CreateBrowserContainerAsync(int profileId, BrowserConfig config, string nodeIp)
     {
@@ -51,8 +77,8 @@ public class DockerService
                         }
                     }
                 },
-                Memory = 1024 * 1024 * 512, // 512MB
-                MemorySwap = 1024 * 1024 * 512,
+                Memory = 512 * 1024 * 1024, // 512MB
+                MemorySwap = 512 * 1024 * 1024,
                 NanoCPUs = 500_000_000, // 0.5 CPU
                 RestartPolicy = new RestartPolicy { Name = RestartPolicyKind.UnlessStopped },
                 NetworkMode = _configuration["Docker:NetworkName"] ?? "maskbrowser-network"
@@ -114,4 +140,3 @@ public class DockerService
         return containers.Where(c => c.Names.Any(n => n.Contains("maskbrowser-profile"))).ToList();
     }
 }
-

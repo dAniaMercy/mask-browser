@@ -165,7 +165,7 @@ services:
     container_name: maskbrowser-web
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://api:8080
+      - NEXT_PUBLIC_API_URL=http://109.172.101.73:8080
       - PORT=5052
     ports:
       - "5052:5052"
@@ -189,7 +189,7 @@ services:
       dockerfile: ../infra/Dockerfile.agent
     container_name: maskbrowser-agent
     environment:
-      - API_URL=http://api:8080
+      - API_URL=http://109.172.101.73:8080
       - DOCKER_SOCKET=/var/run/docker.sock
       - KAFKA_BROKERS=kafka:29092
       - RABBITMQ_HOST=rabbitmq

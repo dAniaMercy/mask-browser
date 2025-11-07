@@ -7,10 +7,11 @@ RUN apk add --no-cache git gcc musl-dev
 
 # Copy go mod files
 COPY agent/go.mod agent/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY agent/ .
+COPY . .
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o agent .

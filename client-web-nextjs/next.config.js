@@ -4,11 +4,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:8080';
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
-  i18n: {
-    locales: ['ru', 'en'],
-    defaultLocale: 'ru',
-    localeDetection: true,
-  },
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050',
   },

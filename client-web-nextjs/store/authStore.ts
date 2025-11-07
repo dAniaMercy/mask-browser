@@ -10,6 +10,7 @@ interface User {
   email: string;
   isAdmin?: boolean;
   requires2FA?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthState {
@@ -48,7 +49,6 @@ export const useAuthStore = create<AuthState>()(
           });
           axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         } catch (error: any) {
-          // Если требуется 2FA, пробрасываем ошибку дальше
           if (error.response?.status === 426) {
             throw error;
           }
@@ -88,4 +88,3 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
-

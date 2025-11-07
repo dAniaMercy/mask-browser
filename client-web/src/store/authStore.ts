@@ -3,10 +3,12 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import axios from 'axios'
 
 interface User {
-  id: number
-  username: string
-  email: string
-  isAdmin?: boolean
+  id: number;
+  username: string;
+  email: string;
+  isAdmin?: boolean;
+  requires2FA?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthState {

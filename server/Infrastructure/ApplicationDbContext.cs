@@ -28,14 +28,19 @@ public class ApplicationDbContext : DbContext
         });
 
         // BrowserProfile configuration
+        // BrowserProfile configuration
         modelBuilder.Entity<BrowserProfile>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
-                  .WithMany(u => u.BrowserProfiles)
-                  .HasForeignKey(e => e.UserId);
+                .WithMany(u => u.BrowserProfiles)
+                .HasForeignKey(e => e.UserId);
+
+            // Встроенный объект BrowserConfig
+            entity.OwnsOne(e => e.Config);
         });
+
 
         // ServerNode configuration
         modelBuilder.Entity<ServerNode>(entity =>

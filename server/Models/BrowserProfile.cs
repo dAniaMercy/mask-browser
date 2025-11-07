@@ -1,7 +1,10 @@
 namespace MaskBrowser.Server.Models;
+using System.ComponentModel.DataAnnotations;
+
 
 public class BrowserProfile
 {
+    [Key]
     public int Id { get; set; }
     public int UserId { get; set; }
     public string Name { get; set; } = string.Empty;

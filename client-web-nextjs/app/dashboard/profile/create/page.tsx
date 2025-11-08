@@ -21,20 +21,19 @@ export default function CreateProfilePage() {
     webRTC: false,
     canvas: false,
     webGL: false,
-  });
+});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
+  
+    console.log('📤 Отправка:', { name, config });
+  
     try {
       await createProfile(name, config);
       router.push('/dashboard');
     } catch (err: any) {
+      console.error('❌ Ошибка:', err.response?.data);
       setError(err.response?.data?.message || 'Ошибка создания профиля');
-    } finally {
-      setLoading(false);
     }
   };
 

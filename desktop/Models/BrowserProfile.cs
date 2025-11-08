@@ -1,3 +1,5 @@
+using System;
+
 namespace MaskBrowser.Desktop.Models
 {
     public class BrowserProfile

@@ -2,14 +2,13 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import axios from 'axios';
+import apiClient from '@/lib/axios';
 
 interface User {
   id: number;
   username: string;
   email: string;
   isAdmin?: boolean;
-  requires2FA?: boolean;
   twoFactorEnabled?: boolean;
 }
 
@@ -23,8 +22,6 @@ interface AuthState {
   logout: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050';
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -33,35 +30,14 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isAdmin: false,
 
-      login: async (email: string, password: string, twoFactorCode?: string) => {
-        try {
-          const response = await axios.post(
-            `${API_URL}/api/auth/login`,
-            { email, password, twoFactorCode },
-            { withCredentials: true }
-          );
-          const { token, user } = response.data;
-          set({
-            token,
-            user,
-            isAuthenticated: true,
-            isAdmin: user.isAdmin || false,
-          });
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        } catch (error: any) {
-          if (error.response?.status === 426) {
-            throw error;
-          }
-          throw error;
-        }
-      },
-
       register: async (username: string, email: string, password: string) => {
-        const response = await axios.post(
-          `${API_URL}/api/auth/register`,
-          { username, email, password },
-          { withCredentials: true }
-        );
+        console.log('🚀 Регистрация:', { username, email });
+        const response = await apiClient.post('/api/auth/register', {
+          username,
+          email,
+          password,
+        });
+        console.log('✅ Регистрация успешна');
         const { token, user } = response.data;
         set({
           token,
@@ -69,7 +45,23 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           isAdmin: user.isAdmin || false,
         });
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      },
+
+      login: async (email: string, password: string, twoFactorCode?: string) => {
+        console.log('🚀 Вход:', { email, has2FA: !!twoFactorCode });
+        const response = await apiClient.post('/api/auth/login', {
+          email,
+          password,
+          twoFactorCode,
+        });
+        console.log('✅ Вход успешен');
+        const { token, user } = response.data;
+        set({
+          token,
+          user,
+          isAuthenticated: true,
+          isAdmin: user.isAdmin || false,
+        });
       },
 
       logout: () => {
@@ -79,7 +71,6 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isAdmin: false,
         });
-        delete axios.defaults.headers.common['Authorization'];
       },
     }),
     {

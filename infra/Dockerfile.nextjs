@@ -15,7 +15,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY client-web-nextjs/ .
 
 ENV NEXT_TELEMETRY_DISABLED 1
-ENV NEXT_PUBLIC_API_URL=http://109.172.101.73:8080
+ENV NEXT_PUBLIC_API_URL=http://109.172.101.73:5050
 RUN npm run build
 
 # Production image, copy all the files and run next

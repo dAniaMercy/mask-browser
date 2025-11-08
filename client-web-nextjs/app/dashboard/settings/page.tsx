@@ -6,10 +6,8 @@ import { motion } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuthStore } from '@/store/authStore';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import axios from 'axios';
-import { Shield, Key } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050';
+import apiClient from '@/lib/axios';
+import { Shield, Key, User, Globe, Bell } from 'lucide-react';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -33,14 +31,7 @@ export default function SettingsPage() {
     setLoading(true);
     setError('');
     try {
-      const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token;
-      const response = await axios.post(
-        `${API_URL}/api/auth/two-factor/enable`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const response = await apiClient.post('/api/auth/two-factor/enable');
       setQrCode(response.data.qrCode);
       setRecoveryCodes(response.data.recoveryCodes);
       setTwoFactorEnabled(true);
@@ -58,14 +49,7 @@ export default function SettingsPage() {
     setLoading(true);
     setError('');
     try {
-      const token = JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token;
-      await axios.post(
-        `${API_URL}/api/auth/two-factor/disable`,
-        { password },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      await apiClient.post('/api/auth/two-factor/disable', { password });
       setTwoFactorEnabled(false);
       setQrCode('');
       setRecoveryCodes([]);
@@ -85,7 +69,7 @@ export default function SettingsPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-2xl mx-auto"
+        className="max-w-4xl mx-auto"
       >
         <h1 className="text-3xl font-bold mb-8 text-purple-600 dark:text-purple-400">
           {t('common.settings')}
@@ -96,20 +80,64 @@ export default function SettingsPage() {
         )}
 
         <div className="space-y-6">
-          {/* Theme Settings */}
+          {/* Профиль */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg">
             <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
-              <span>{t('common.theme')}</span>
+              <User className="w-6 h-6 text-purple-600" />
+              <span>Профиль пользователя</span>
+            </h2>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Имя пользователя:</span>
+                <span className="font-semibold">{user?.username}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Email:</span>
+                <span className="font-semibold">{user?.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600 dark:text-gray-400">Роль:</span>
+                <span className="font-semibold">
+                  {user?.isAdmin ? (
+                    <span className="text-red-500">Администратор</span>
+                  ) : (
+                    'Пользователь'
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Тема */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg">
+            <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
+              <Globe className="w-6 h-6 text-purple-600" />
+              <span>Внешний вид</span>
             </h2>
             <div className="flex items-center justify-between">
-              <span className="text-gray-600 dark:text-gray-400">
-                {t('common.theme')}: Тёмная / Светлая
-              </span>
+              <div>
+                <p className="font-medium">Тёмная / Светлая тема</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Выберите удобную для вас тему оформления
+                </p>
+              </div>
               <ThemeToggle />
             </div>
           </div>
 
-          {/* Two-Factor Authentication */}
+          {/* Язык */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg">
+            <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
+              <Globe className="w-6 h-6 text-purple-600" />
+              <span>Язык интерфейса</span>
+            </h2>
+            <select className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg">
+              <option value="ru">🇷🇺 Русский</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
+          </div>
+
+          {/* 2FA */}
           <div className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg">
             <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
               <Shield className="w-6 h-6 text-purple-600" />
@@ -119,7 +147,8 @@ export default function SettingsPage() {
             {!twoFactorEnabled ? (
               <div>
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Двухфакторная аутентификация повышает безопасность вашего аккаунта
+                  Двухфакторная аутентификация повышает безопасность вашего аккаунта.
+                  После включения потребуется код из приложения-аутентификатора при входе.
                 </p>
                 <button
                   onClick={handleEnable2FA}
@@ -131,8 +160,9 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div>
-                <p className="text-green-600 dark:text-green-400 mb-4">
-                  ✓ 2FA включен
+                <p className="text-green-600 dark:text-green-400 mb-4 flex items-center space-x-2">
+                  <Shield className="w-5 h-5" />
+                  <span>✓ 2FA включен</span>
                 </p>
                 {qrCode && (
                   <div className="mb-4">
@@ -173,9 +203,26 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+
+          {/* Уведомления */}
+          <div className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg">
+            <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
+              <Bell className="w-6 h-6 text-purple-600" />
+              <span>Уведомления</span>
+            </h2>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between">
+                <span>Email уведомления при запуске профиля</span>
+                <input type="checkbox" className="w-5 h-5" />
+              </label>
+              <label className="flex items-center justify-between">
+                <span>Email уведомления при ошибках</span>
+                <input type="checkbox" defaultChecked className="w-5 h-5" />
+              </label>
+            </div>
+          </div>
         </div>
       </motion.div>
     </div>
   );
 }
-

@@ -13,21 +13,22 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/mux"
 	"github.com/streadway/amqp"
 )
 
 type Agent struct {
-	dockerClient *client.Client
+	dockerClient  *client.Client
 	kafkaProducer *kafka.Producer
-	rabbitMQConn *amqp.Connection
-	rabbitMQCh *amqp.Channel
+	rabbitMQConn  *amqp.Connection
+	rabbitMQCh    *amqp.Channel
 }
 
 type ContainerTask struct {
-	Action      string `json:"action"`      // create, start, stop, delete
-	ProfileID   int    `json:"profileId"`
-	ContainerID string `json:"containerId"`
+	Action      string                 `json:"action"` // create, start, stop, delete
+	ProfileID   int                    `json:"profileId"`
+	ContainerID string                 `json:"containerId"`
 	Config      map[string]interface{} `json:"config"`
 }
 
@@ -51,7 +52,7 @@ func NewAgent() (*Agent, error) {
 		os.Getenv("RABBITMQ_USER"),
 		os.Getenv("RABBITMQ_PASS"),
 		os.Getenv("RABBITMQ_HOST"))
-	
+
 	rabbitConn, err := amqp.Dial(rabbitURL)
 	if err != nil {
 		return nil, err
@@ -63,59 +64,67 @@ func NewAgent() (*Agent, error) {
 	}
 
 	return &Agent{
-		dockerClient:   dockerClient,
-		kafkaProducer:  kafkaProducer,
-		rabbitMQConn:   rabbitConn,
-		rabbitMQCh:     rabbitCh,
+		dockerClient:  dockerClient,
+		kafkaProducer: kafkaProducer,
+		rabbitMQConn:  rabbitConn,
+		rabbitMQCh:    rabbitCh,
 	}, nil
 }
 
 func (a *Agent) CreateBrowserContainer(profileID int, config map[string]interface{}) (string, error) {
 	ctx := context.Background()
 
-	containerConfig := &container.Config{
-		Image: "maskbrowser/browser:latest",
-		Env: []string{
-			fmt.Sprintf("PROFILE_ID=%d", profileID),
-		},
-		ExposedPorts: map[string]struct{}{
-			"8080/tcp": {},
-		},
+	// Exposed ports as nat.PortSet
+	exposed := nat.PortSet{
+		"8080/tcp": struct{}{},
 	}
 
+	containerConfig := &container.Config{
+		Image:        "maskbrowser/browser:latest",
+		Env:          []string{fmt.Sprintf("PROFILE_ID=%d", profileID)},
+		ExposedPorts: exposed,
+	}
+
+	// PortBindings and Resources in HostConfig
 	hostConfig := &container.HostConfig{
-		PortBindings: map[string][]container.PortBinding{
-			"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "0"}},
+		PortBindings: nat.PortMap{
+			"8080/tcp": []nat.PortBinding{
+				{HostIP: "0.0.0.0", HostPort: "0"},
+			},
 		},
-		Memory:     512 * 1024 * 1024, // 512MB
-		MemorySwap: 512 * 1024 * 1024,
-		NanoCPUs:   500_000_000, // 0.5 CPU
+		Resources: container.Resources{
+			Memory:     512 * 1024 * 1024, // 512 MB
+			MemorySwap: 512 * 1024 * 1024,
+			NanoCPUs:   500_000_000, // 0.5 CPU
+		},
 		RestartPolicy: container.RestartPolicy{
 			Name: "unless-stopped",
 		},
 	}
 
-	resp, err := a.dockerClient.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil,
-		fmt.Sprintf("maskbrowser-profile-%d", profileID))
+	// Create container
+	name := fmt.Sprintf("maskbrowser-profile-%d", profileID)
+	resp, err := a.dockerClient.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, name)
 	if err != nil {
 		return "", err
 	}
 
-	err = a.dockerClient.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
-	if err != nil {
+	// Start container
+	if err := a.dockerClient.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
 
 	// Publish to Kafka
+	topic := "profile-events"
 	event := map[string]interface{}{
-		"eventType":  "ContainerCreated",
+		"eventType":   "ContainerCreated",
 		"profileId":   profileID,
 		"containerId": resp.ID,
 		"timestamp":   time.Now().Unix(),
 	}
 	eventJSON, _ := json.Marshal(event)
-	a.kafkaProducer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &[]string{"profile-events"}[0], Partition: kafka.PartitionAny},
+	_ = a.kafkaProducer.Produce(&kafka.Message{
+		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 		Value:          eventJSON,
 	}, nil)
 
@@ -153,8 +162,9 @@ func (a *Agent) HandleRabbitMQTasks() {
 			}
 		case "stop":
 			ctx := context.Background()
-			timeout := 30 * time.Second
-			err := a.dockerClient.ContainerStop(ctx, task.ContainerID, &timeout)
+			timeout := int(30)
+			// ContainerStop expects container.StopOptions
+			err := a.dockerClient.ContainerStop(ctx, task.ContainerID, container.StopOptions{Timeout: &timeout})
 			if err != nil {
 				log.Printf("Error stopping container: %v", err)
 			}
@@ -180,10 +190,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer agent.dockerClient.Close()
-	defer agent.kafkaProducer.Close()
-	defer agent.rabbitMQConn.Close()
-	defer agent.rabbitMQCh.Close()
+	defer func() {
+		if agent.dockerClient != nil {
+			_ = agent.dockerClient.Close()
+		}
+		if agent.kafkaProducer != nil {
+			agent.kafkaProducer.Close()
+		}
+		if agent.rabbitMQConn != nil {
+			_ = agent.rabbitMQConn.Close()
+		}
+		if agent.rabbitMQCh != nil {
+			_ = agent.rabbitMQCh.Close()
+		}
+	}()
 
 	// Start RabbitMQ consumer
 	go agent.HandleRabbitMQTasks()
@@ -200,4 +220,3 @@ func main() {
 	log.Printf("Agent started on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
-

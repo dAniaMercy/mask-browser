@@ -46,6 +46,12 @@ export default function DashboardPage() {
   return (
     <Layout>
         <motion.div
+          key={profile.id}
+          onClick={() => router.push(`/dashboard/profile/${profile.id}`)}
+          className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
+      ></motion.div>
+
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"

@@ -87,10 +87,8 @@ func (a *Agent) CreateBrowserContainer(profileID int, config map[string]interfac
 
 	// PortBindings and Resources in HostConfig
 	hostConfig := &container.HostConfig{
-		PortBindings: nat.PortMap{
-			"5050/tcp": []nat.PortBinding{
-				{HostIP: "0.0.0.0", HostPort: "0"},
-			},
+		PortBindings: map[string][]container.PortBinding{
+			"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "0"}},
 		},
 		Resources: container.Resources{
 			Memory:     512 * 1024 * 1024, // 512 MB

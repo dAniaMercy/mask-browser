@@ -6,17 +6,25 @@ export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin');
   const host = request.headers.get('host');
 
-  // Разрешенные origins
-  const allowedOrigins = [
+  // Разрешенные origins (гарантируем string[], убираем undefined)
+  const envApiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+  const allowedOrigins: string[] = [
     'http://109.172.101.73:5052',
     'https://109.172.101.73',
-    'https://yourdomain.com', // Замените на ваш домен
-    process.env.NEXT_PUBLIC_API_URL,
-  ];
+    'https://yourdomain.com', // замените на ваш домен
+    envApiUrl,
+  ].filter((o): o is string => o.trim().length > 0);
 
   // Для API запросов проверяем Origin
   if (request.nextUrl.pathname.startsWith('/api/proxy')) {
-    if (origin && !allowedOrigins.some(allowed => (origin ?? '').includes(allowed))) {
+    const originHeader = request.headers.get('origin');
+    const safeOrigin = originHeader ?? '';
+
+    const isAllowed = allowedOrigins.some((allowed) =>
+      safeOrigin.includes(allowed)
+    );
+
+    if (originHeader && !isAllowed) {
       return NextResponse.json(
         { error: 'Invalid origin' },
         { status: 403 }
@@ -26,7 +34,7 @@ export function middleware(request: NextRequest) {
 
   // Security headers
   const response = NextResponse.next();
-  
+
   response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-XSS-Protection', '1; mode=block');
@@ -48,9 +56,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/api/:path*',
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/api/:path*', '/((?!_next/static|_next/image|favicon.ico).*)'],
 };
-

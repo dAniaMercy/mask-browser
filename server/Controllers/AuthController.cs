@@ -19,7 +19,9 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+{
+    try
     {
         var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
         if (user == null)
@@ -39,6 +41,14 @@ public class AuthController : ControllerBase
             }
         });
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Registration failed for {Email}", request.Email);
+        // Возвращаем 500 и текст ошибки (на dev можно вернуть ex.Message; в prod осторожно)
+        return StatusCode(500, new { message = "Server error during registration", error = ex.Message });
+    }
+}
+
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)

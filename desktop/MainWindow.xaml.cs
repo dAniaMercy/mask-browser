@@ -41,9 +41,14 @@ namespace MaskBrowser.Desktop
                     ProfileView.Visibility = Visibility.Visible;
                     await LoadProfilesAsync();
                 }
+                else if (result.RequiresTwoFactor)
+                {
+                    ShowError("Требуется двухфакторная аутентификация. Введите код 2FA.");
+                    // TODO: show 2FA input UI and call LoginAsync again with code
+                }
                 else
                 {
-                    ShowError(result.Message);
+                    ShowError(result.Message ?? "Ошибка входа");
                 }
             }
             catch (Exception ex)

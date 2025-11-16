@@ -124,9 +124,9 @@ services:
     container_name: maskbrowser-api
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123;Pooling=true;Maximum Pool Size=100
       - ConnectionStrings__Redis=redis:6379
-      - Jwt__Key=your-super-secret-jwt-key-change-in-production-min-32-chars
       - Jwt__Issuer=MaskBrowser
       - Jwt__Audience=MaskBrowser
       - RabbitMQ__HostName=rabbitmq
@@ -137,6 +137,9 @@ services:
       - ServerIP=109.172.101.73
       - Cloudflare__Enabled=true
       - DOCKER_HOST=unix:///var/run/docker.sock
+      # Важно: логирование
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__MaskBrowser=Information
     ports:
       - "5050:8080"
     volumes:
@@ -150,10 +153,12 @@ services:
       - kafka
       - rabbitmq
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://109.172.101.73:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
+    restart: unless-stopped
     labels:
       - "com.docker.compose.service=api"
       - "logging=promtail"

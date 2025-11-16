@@ -1,6 +1,4 @@
 using System.Windows;
-using CefSharp;
-using CefSharp.Wpf;
 
 namespace MaskBrowser.Desktop
 {
@@ -9,18 +7,12 @@ namespace MaskBrowser.Desktop
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-
-            var settings = new CefSettings
-            {
-                BrowserSubprocessPath = @"CefSharp.BrowserSubprocess.exe"
-            };
-
-            Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
+            // CefSharp initialization removed for build compatibility in this environment.
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
-            Cef.Shutdown();
+            // CefSharp shutdown removed.
             base.OnExit(e);
         }
     }

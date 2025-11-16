@@ -33,11 +33,12 @@ interface ProfileState {
   startProfile: (id: number) => Promise<void>
   stopProfile: (id: number) => Promise<void>
   deleteProfile: (id: number) => Promise<void>
+  updateProfile: (id: number, name: string, config: BrowserConfig) => Promise<void>
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://109.172.101.73:5050'
 
-export const useProfileStore = create<ProfileState>((set, get) => ({
+export const useProfileStore = create<ProfileState>((set: any, get: any) => ({
   profiles: [],
   loading: false,
   error: null,
@@ -48,7 +49,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       const response = await axios.get(`${API_URL}/api/profile`)
       set({ profiles: response.data, loading: false })
     } catch (error: any) {
-      set({ error: error.message, loading: false })
+      set({ error: error.message || 'Failed to fetch profiles', loading: false })
     }
   },
 
@@ -56,12 +57,12 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await axios.post(`${API_URL}/api/profile`, { name, config })
-      set((state) => ({
+      set((state: ProfileState) => ({
         profiles: [...state.profiles, response.data],
         loading: false,
       }))
     } catch (error: any) {
-      set({ error: error.message, loading: false })
+      set({ error: error?.response?.data?.message || error.message || 'Failed to create profile', loading: false })
       throw error
     }
   },
@@ -72,7 +73,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       await axios.post(`${API_URL}/api/profile/${id}/start`)
       await get().fetchProfiles()
     } catch (error: any) {
-      set({ error: error.message, loading: false })
+      set({ error: error?.response?.data?.message || error.message || 'Failed to start profile', loading: false })
       throw error
     }
   },
@@ -83,7 +84,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       await axios.post(`${API_URL}/api/profile/${id}/stop`)
       await get().fetchProfiles()
     } catch (error: any) {
-      set({ error: error.message, loading: false })
+      set({ error: error?.response?.data?.message || error.message || 'Failed to stop profile', loading: false })
       throw error
     }
   },
@@ -92,12 +93,27 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       await axios.delete(`${API_URL}/api/profile/${id}`)
-      set((state) => ({
-        profiles: state.profiles.filter((p) => p.id !== id),
+      set((state: ProfileState) => ({
+        profiles: state.profiles.filter((p: BrowserProfile) => p.id !== id),
         loading: false,
       }))
     } catch (error: any) {
-      set({ error: error.message, loading: false })
+      set({ error: error?.response?.data?.message || error.message || 'Failed to delete profile', loading: false })
+      throw error
+    }
+  },
+
+  updateProfile: async (id: number, name: string, config: BrowserConfig) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await axios.put(`${API_URL}/api/profile/${id}`, { name, config })
+      const updated = response.data
+      set((state: ProfileState) => ({
+        profiles: state.profiles.map((p: BrowserProfile) => (p.id === id ? updated : p)),
+        loading: false,
+      }))
+    } catch (error: any) {
+      set({ error: error?.response?.data?.message || error.message || 'Failed to update profile', loading: false })
       throw error
     }
   },

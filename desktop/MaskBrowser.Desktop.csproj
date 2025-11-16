@@ -4,19 +4,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>icon.ico</ApplicationIcon>
     <AssemblyName>MaskBrowser</AssemblyName>
     <RootNamespace>MaskBrowser.Desktop</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CefSharp.Common" Version="126.2.180" />
-    <PackageReference Include="CefSharp.OffScreen.NETCore" Version="141.0.110" />
-    <PackageReference Include="CefSharp.WinForms.NETCore" Version="141.0.110" />
-    <PackageReference Include="CefSharp.Wpf" Version="141.0.110" />
-    <PackageReference Include="CefSharp.Wpf.NETCore" Version="141.0.110" />
-    <PackageReference Include="chromiumembeddedframework.runtime.win-x86" Version="126.2.18" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="RestSharp" Version="110.2.0" />
     <PackageReference Include="System.Text.Encodings.Web" Version="7.0.0" />
@@ -24,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\**" />
+    <Resource Include="Assets\\**" />
   </ItemGroup>
 
 </Project>

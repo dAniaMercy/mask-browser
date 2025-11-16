@@ -2,7 +2,9 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using MaskBrowser.Desktop.Models;
+using System.IO;
 
 namespace MaskBrowser.Desktop.Services
 {
@@ -11,6 +13,7 @@ namespace MaskBrowser.Desktop.Services
         private readonly HttpClient _httpClient;
         private readonly string _apiUrl = "http://109.172.101.73:5050/api";
         private string? _token;
+        private readonly string _logPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "api.log");
 
         public ApiService()
         {
@@ -18,36 +21,73 @@ namespace MaskBrowser.Desktop.Services
             _httpClient.BaseAddress = new Uri(_apiUrl);
         }
 
-        public async Task<AuthResult> LoginAsync(string email, string password)
+        // Accept optional twoFactorCode
+        public async Task<AuthResult> LoginAsync(string email, string password, string? twoFactorCode = null)
         {
             try
             {
+                var payload = new { email, password, twoFactorCode };
+
                 var content = new StringContent(
-                    JsonConvert.SerializeObject(new { email, password }),
+                    JsonConvert.SerializeObject(payload),
                     Encoding.UTF8,
                     "application/json"
                 );
 
-                var response = await _httpClient.PostAsync("/auth/login", content);
+                var requestUri = new Uri(_httpClient.BaseAddress, "auth/login");
+
+                // Log request
+                Log($"POST {requestUri} -> payload: {JsonConvert.SerializeObject(payload)}");
+
+                var response = await _httpClient.PostAsync(requestUri, content);
                 var json = await response.Content.ReadAsStringAsync();
+
+                // Log response
+                Log($"RESPONSE {requestUri} -> {(int)response.StatusCode} {response.ReasonPhrase} - {json}");
 
                 if (response.IsSuccessStatusCode)
                 {
                     var result = JsonConvert.DeserializeObject<AuthResponse>(json);
                     _token = result?.Token;
-                    _httpClient.DefaultRequestHeaders.Authorization = 
-                        new AuthenticationHeaderValue("Bearer", _token);
-                    return new AuthResult { Success = true };
+                    if (!string.IsNullOrEmpty(_token))
+                    {
+                        _httpClient.DefaultRequestHeaders.Authorization = 
+                            new AuthenticationHeaderValue("Bearer", _token);
+                    }
+
+                    return new AuthResult { Success = true, Token = _token };
                 }
-                else
+
+                // parse error body for message and 2FA requirement
+                try
                 {
-                    var error = JsonConvert.DeserializeObject<ErrorResponse>(json);
-                    return new AuthResult { Success = false, Message = error?.Message ?? "Ошибка входа" };
+                    var obj = JObject.Parse(json);
+                    var message = obj["message"]?.ToString() ?? obj["error"]?.ToString() ?? json;
+                    var requires2FA = obj["requires2FA"]?.Value<bool?>() ?? obj["requires_2fa"]?.Value<bool?>() ?? false;
+
+                    return new AuthResult { Success = false, Message = $"{(int)response.StatusCode} {response.ReasonPhrase}: {message}", RequiresTwoFactor = requires2FA };
+                }
+                catch
+                {
+                    return new AuthResult { Success = false, Message = $"{(int)response.StatusCode} {response.ReasonPhrase} - {requestUri}: {json}" };
                 }
             }
             catch (Exception ex)
             {
+                Log($"EXCEPTION LoginAsync: {ex}");
                 return new AuthResult { Success = false, Message = ex.Message };
+            }
+        }
+
+        private void Log(string text)
+        {
+            try
+            {
+                File.AppendAllText(_logPath, $"[{DateTime.UtcNow:O}] {text}\n");
+            }
+            catch
+            {
+                // ignore logging failures
             }
         }
 
@@ -97,6 +137,8 @@ namespace MaskBrowser.Desktop.Services
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
+        public bool RequiresTwoFactor { get; set; }
+        public string? Token { get; set; }
     }
 
     public class AuthResponse

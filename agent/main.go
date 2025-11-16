@@ -97,6 +97,14 @@ func (a *Agent) CreateBrowserContainer(profileID int, config map[string]interfac
 			MemorySwap: 512 * 1024 * 1024,
 			NanoCPUs:   500_000_000, // 0.5 CPU
 		},
+<<<<<<< HEAD
+=======
+		Resources: container.Resources{
+			Memory:     512 * 1024 * 1024, // 512 MB
+			MemorySwap: 512 * 1024 * 1024,
+			NanoCPUs:   500_000_000, // 0.5 CPU
+		},
+>>>>>>> ad4982acb2cde704b21ab2d940d77220d218fa37
 		RestartPolicy: container.RestartPolicy{
 			Name: "unless-stopped",
 		},

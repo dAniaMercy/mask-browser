@@ -50,7 +50,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LoadBalancerService>();
 builder.Services.AddScoped<CryptoPaymentService>();
-builder.Services.AddScoped<MetricsService>();
+builder.Services.AddSingleton<IMetricsService, MetricsService>();
 builder.Services.AddScoped<CyberneticsApiService>();
 
 // Background Jobs
@@ -84,24 +84,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// CORS
+// CORS - ВАЖНО: разрешаем все источники для разработки
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins(
-            "http://109.172.101.73:5052",
-            "http://109.172.101.73",
-            "http://localhost:5052"
-        )
-        .AllowAnyMethod()
-        .AllowAnyHeader()
-        .AllowCredentials();
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
-
-// Prometheus Metrics
-builder.Services.AddSingleton<IMetricsService, MetricsService>();
 
 // Health Checks
 builder.Services.AddHealthChecks()
@@ -109,6 +101,9 @@ builder.Services.AddHealthChecks()
     .AddRedis(configuration.GetConnectionString("Redis")!);
 
 var app = builder.Build();
+
+// ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
+app.UseCors("AllowAll");
 
 // Prometheus endpoint
 app.UseHttpMetrics();
@@ -121,7 +116,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors();  // ← Используем DefaultPolicy
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -130,5 +124,10 @@ app.MapControllers();
 // Health check endpoint
 app.MapHealthChecks("/health");
 
-app.Run();
+// Логирование при запуске
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("🚀 MASK BROWSER API started");
+logger.LogInformation("📍 CORS enabled for all origins");
+logger.LogInformation("🔐 JWT RSA256 authentication enabled");
 
+app.Run();

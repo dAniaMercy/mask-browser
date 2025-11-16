@@ -44,8 +44,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <Layout>
-        <motion.div
+    <motion.div
           key={profile.id}
           onClick={() => router.push(`/dashboard/profile/${profile.id}`)}
           className="bg-white dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-800 shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
@@ -136,8 +135,6 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </motion.div>
-    </Layout>
+    </motion.div>
   );
 }
-

@@ -11,7 +11,7 @@ namespace MaskBrowser.Desktop.Services
     public class ApiService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _apiUrl = "http://109.172.101.73:5050/api";
+        private readonly string _apiUrl = "http://109.172.101.73:5050/";
         private string? _token;
         private readonly string _logPath = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "api.log");
 

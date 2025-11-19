@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: maskadmin-postgres
+    environment:
+      POSTGRES_DB: maskadmin
+      POSTGRES_USER: maskadmin
+      POSTGRES_PASSWORD: maskadmin123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - maskadmin-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maskadmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: maskadmin-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - maskadmin-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  maskadmin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maskadmin-app
+    ports:
+      - "5100:80"
+      - "5101:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskadmin;Username=maskadmin;Password=maskadmin123
+      - ConnectionStrings__Redis=redis:6379
+      - JwtSettings__SecretKey=your-super-secret-jwt-key-change-in-production-min-32-chars
+      - MaskBrowserAPI__BaseUrl=http://host.docker.internal:5050
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - maskadmin-network
+    volumes:
+      - ./logs:/app/logs
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: maskadmin-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - maskadmin-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: maskadmin-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - maskadmin-network
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  maskadmin-network:
+    driver: bridge

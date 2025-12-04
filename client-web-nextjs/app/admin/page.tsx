@@ -22,7 +22,7 @@ interface User {
   isActive: boolean;
   createdAt: string;
   subscription?: {
-    tier: string;
+    tier: number;
     maxProfiles: number;
   };
 }
@@ -59,6 +59,13 @@ export default function AdminPanel() {
   const [users, setUsers] = useState<User[]>([]);
   const [servers, setServers] = useState<ServerNode[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const subscriptionTierLabels: Record<number, string> = {
+    0: 'Free',
+    1: 'Basic',
+    2: 'Pro',
+    3: 'Enterprise',
+  };
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
@@ -271,7 +278,9 @@ export default function AdminPanel() {
                           </span>
                         </td>
                         <td className="p-3">
-                          {user.subscription?.tier || 'Free'} ({user.subscription?.maxProfiles || 0})
+                          {user.subscription
+                            ? `${subscriptionTierLabels[user.subscription.tier] ?? user.subscription.tier} (${user.subscription.maxProfiles})`
+                            : 'Free (0)'}
                         </td>
                         <td className="p-3">
                           {user.isActive ? (

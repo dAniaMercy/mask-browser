@@ -6,9 +6,6 @@ import { motion } from 'framer-motion';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useAuthStore } from '@/store/authStore';
 import { User, Mail, Shield, Calendar, Save } from 'lucide-react';
-import axios from 'axios';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050';
 
 export default function AccountPage() {
   const router = useRouter();
@@ -46,25 +43,10 @@ export default function AccountPage() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    setLoading(true);
 
-    try {
-      await axios.put(
-        `${API_URL}/api/user/profile`,
-        {
-          username: formData.username,
-          email: formData.email,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      setSuccess('Профиль успешно обновлён');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка обновления профиля');
-    } finally {
-      setLoading(false);
-    }
+    // В текущей версии API сервер не поддерживает обновление профиля пользователя.
+    // Чтобы избежать 404, просто информируем пользователя.
+    setError('Обновление профиля пока не поддерживается на сервере.');
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -82,31 +64,9 @@ export default function AccountPage() {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      await axios.put(
-        `${API_URL}/api/user/change-password`,
-        {
-          currentPassword: formData.currentPassword,
-          newPassword: formData.newPassword,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      setSuccess('Пароль успешно изменён');
-      setFormData({
-        ...formData,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Ошибка изменения пароля');
-    } finally {
-      setLoading(false);
-    }
+    // В текущей версии API сервер не поддерживает смену пароля.
+    // Чтобы избежать 404, просто информируем пользователя.
+    setError('Смена пароля пока не поддерживается на сервере.');
   };
 
   if (!isAuthenticated || !user) {

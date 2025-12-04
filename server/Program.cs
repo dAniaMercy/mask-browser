@@ -102,6 +102,25 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+// Применяем миграции БД автоматически при старте
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        context.Database.Migrate();
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogInformation("✅ Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "❌ An error occurred while applying database migrations");
+        throw;
+    }
+}
+
 // ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
 app.UseCors("AllowAll");
 

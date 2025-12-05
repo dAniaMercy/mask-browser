@@ -228,15 +228,20 @@ public class ProfileService
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("✅ Updated node health: {ServerIp}, LastCheck={LastCheck}", 
                     serverIp, registeredNode.LastHealthCheck);
+                
+                // Используем обновленную ноду напрямую, без повторной проверки
+                node = registeredNode;
+                _logger.LogInformation("✅ Using updated node: {ServerIp}", serverIp);
             }
             else
             {
                 _logger.LogWarning("⚠️ Node {ServerIp} not found after registration", serverIp);
+                
+                // Пробуем снова выбрать ноду
+                _logger.LogInformation("🔍 Attempting to select node again...");
+                node = await _loadBalancerService.SelectNodeAsync();
             }
             
-            // Пробуем снова выбрать ноду
-            _logger.LogInformation("🔍 Attempting to select node again...");
-            node = await _loadBalancerService.SelectNodeAsync();
             if (node == null)
             {
                 _logger.LogError("❌ Failed to create or select node for profile {ProfileId}. Checking all nodes...", profileId);

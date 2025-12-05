@@ -60,23 +60,31 @@ public class DockerService
             _logger.LogInformation("🐳 Creating container for profile {ProfileId} with image {Image}", profileId, imageName);
 
             // Проверяем наличие образа
+            bool imageExists = false;
             try
             {
-                var images = await _dockerClient.Images.ListImagesAsync(new ImagesListParameters
-                {
-                    Filters = new Dictionary<string, IDictionary<string, bool>>
-                    {
-                        { "reference", new Dictionary<string, bool> { { imageName, true } } }
-                    }
-                });
+                _logger.LogInformation("🔍 Checking for image {Image}...", imageName);
+                
+                // Получаем все образы и проверяем по имени
+                var allImages = await _dockerClient.Images.ListImagesAsync(new ImagesListParameters { All = true });
+                imageExists = allImages.Any(img => 
+                    img.RepoTags != null && img.RepoTags.Any(tag => tag == imageName));
 
-                if (!images.Any())
+                if (!imageExists)
                 {
-                    _logger.LogWarning("⚠️ Image {Image} not found. Attempting to pull...", imageName);
+                    _logger.LogWarning("⚠️ Image {Image} not found locally. Checking if it can be pulled from registry...", imageName);
+                    
+                    // Пытаемся загрузить образ из реестра (если он там есть)
                     try
                     {
+                        var imageParts = imageName.Split(':');
+                        var fromImage = imageParts[0];
+                        var tag = imageParts.Length > 1 ? imageParts[1] : "latest";
+                        
+                        _logger.LogInformation("📥 Attempting to pull image {Image}:{Tag}...", fromImage, tag);
+                        
                         await _dockerClient.Images.CreateImageAsync(
-                            new ImagesCreateParameters { FromImage = imageName.Split(':')[0], Tag = imageName.Split(':').Length > 1 ? imageName.Split(':')[1] : "latest" },
+                            new ImagesCreateParameters { FromImage = fromImage, Tag = tag },
                             new AuthConfig(),
                             new Progress<JSONMessage>(msg => 
                             {
@@ -84,15 +92,25 @@ public class DockerService
                                     _logger.LogInformation("Docker pull: {Status}", msg.Status);
                             })
                         );
-                        _logger.LogInformation("✅ Image {Image} pulled successfully", imageName);
+                        
+                        // Проверяем снова после pull
+                        allImages = await _dockerClient.Images.ListImagesAsync(new ImagesListParameters { All = true });
+                        imageExists = allImages.Any(img => 
+                            img.RepoTags != null && img.RepoTags.Any(t => t == imageName));
+                        
+                        if (imageExists)
+                        {
+                            _logger.LogInformation("✅ Image {Image} pulled successfully", imageName);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("⚠️ Image {Image} pull completed but image not found", imageName);
+                        }
                     }
                     catch (Exception pullEx)
                     {
-                        _logger.LogError(pullEx, "❌ Failed to pull image {Image}. Image needs to be built manually.", imageName);
-                        throw new InvalidOperationException(
-                            $"Docker image '{imageName}' not found and could not be pulled. " +
-                            $"Please build it manually: docker build -t {imageName} -f infra/Dockerfile.browser infra/", 
-                            pullEx);
+                        _logger.LogError(pullEx, "❌ Failed to pull image {Image} from registry", imageName);
+                        // Не бросаем исключение здесь, проверим при создании контейнера
                     }
                 }
                 else
@@ -102,8 +120,20 @@ public class DockerService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error checking for image {Image}", imageName);
+                _logger.LogError(ex, "❌ Error checking for image {Image}: {Error}", imageName, ex.Message);
                 // Продолжаем попытку создания контейнера, возможно образ есть
+            }
+
+            // Если образ не найден, выбрасываем понятную ошибку ДО попытки создания контейнера
+            if (!imageExists)
+            {
+                var errorMessage = $"Docker image '{imageName}' not found. " +
+                    $"Please build it first:\n" +
+                    $"  cd /opt/mask-browser/infra\n" +
+                    $"  docker build -t {imageName} -f Dockerfile.browser .";
+                
+                _logger.LogError(errorMessage);
+                throw new InvalidOperationException(errorMessage);
             }
 
             // Создаем bind mount для сохранения данных профиля на хосте

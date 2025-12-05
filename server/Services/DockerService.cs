@@ -50,52 +50,88 @@ public class DockerService
 
     public async Task<string> CreateBrowserContainerAsync(int profileId, BrowserConfig config, string nodeIp)
     {
-        var containerName = $"maskbrowser-profile-{profileId}";
-        var randomPort = new Random().Next(10000, 65535);
-
-        var createParams = new CreateContainerParameters
+        try
         {
-            Image = "maskbrowser/browser:latest",
-            Name = containerName,
-            ExposedPorts = new Dictionary<string, EmptyStruct>
+            var containerName = $"maskbrowser-profile-{profileId}";
+            var randomPort = new Random().Next(10000, 65535);
+            var imageName = _configuration["Docker:BrowserImage"] ?? "maskbrowser/browser:latest";
+
+            _logger.LogInformation("🐳 Creating container for profile {ProfileId} with image {Image}", profileId, imageName);
+
+            var createParams = new CreateContainerParameters
             {
-                { "8080/tcp", new EmptyStruct() }
-            },
-            HostConfig = new HostConfig
-            {
-                PortBindings = new Dictionary<string, IList<PortBinding>>
+                Image = imageName,
+                Name = containerName,
+                ExposedPorts = new Dictionary<string, EmptyStruct>
                 {
+                    { "8080/tcp", new EmptyStruct() }
+                },
+                HostConfig = new HostConfig
+                {
+                    PortBindings = new Dictionary<string, IList<PortBinding>>
                     {
-                        "8080/tcp",
-                        new List<PortBinding>
                         {
-                            new PortBinding
+                            "8080/tcp",
+                            new List<PortBinding>
                             {
-                                HostIP = "0.0.0.0",
-                                HostPort = randomPort.ToString()
+                                new PortBinding
+                                {
+                                    HostIP = "0.0.0.0",
+                                    HostPort = randomPort.ToString()
+                                }
                             }
                         }
-                    }
+                    },
+                    Memory = 512 * 1024 * 1024, // 512MB
+                    MemorySwap = 512 * 1024 * 1024,
+                    NanoCPUs = 500_000_000, // 0.5 CPU
+                    RestartPolicy = new RestartPolicy { Name = RestartPolicyKind.UnlessStopped },
+                    NetworkMode = _configuration["Docker:NetworkName"] ?? "maskbrowser-network"
                 },
-                Memory = 512 * 1024 * 1024, // 512MB
-                MemorySwap = 512 * 1024 * 1024,
-                NanoCPUs = 500_000_000, // 0.5 CPU
-                RestartPolicy = new RestartPolicy { Name = RestartPolicyKind.UnlessStopped },
-                NetworkMode = _configuration["Docker:NetworkName"] ?? "maskbrowser-network"
-            },
-            Env = new List<string>
+                Env = new List<string>
+                {
+                    $"PROFILE_ID={profileId}",
+                    $"CONFIG={JsonSerializer.Serialize(config)}",
+                    $"NODE_IP={nodeIp}"
+                }
+            };
+
+            CreateContainerResponse response;
+            try
             {
-                $"PROFILE_ID={profileId}",
-                $"CONFIG={JsonSerializer.Serialize(config)}",
-                $"NODE_IP={nodeIp}"
+                response = await _dockerClient.Containers.CreateContainerAsync(createParams);
+                _logger.LogInformation("✅ Container created: {ContainerId} for profile {ProfileId}", response.ID, profileId);
             }
-        };
+            catch (DockerApiException ex)
+            {
+                _logger.LogError(ex, "❌ Docker API error creating container: {StatusCode} - {Message}", ex.StatusCode, ex.ResponseBody);
+                throw new InvalidOperationException($"Failed to create Docker container: {ex.ResponseBody}", ex);
+            }
 
-        var response = await _dockerClient.Containers.CreateContainerAsync(createParams);
-        await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters());
+            try
+            {
+                await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters());
+                _logger.LogInformation("✅ Container started: {ContainerId}", response.ID);
+            }
+            catch (DockerApiException ex)
+            {
+                _logger.LogError(ex, "❌ Docker API error starting container: {StatusCode} - {Message}", ex.StatusCode, ex.ResponseBody);
+                // Пытаемся удалить контейнер, если не удалось запустить
+                try
+                {
+                    await _dockerClient.Containers.RemoveContainerAsync(response.ID, new ContainerRemoveParameters { Force = true });
+                }
+                catch { }
+                throw new InvalidOperationException($"Failed to start Docker container: {ex.ResponseBody}", ex);
+            }
 
-        _logger.LogInformation("Container created: {ContainerId} for profile {ProfileId}", response.ID, profileId);
-        return response.ID;
+            return response.ID;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Failed to create browser container for profile {ProfileId}: {Error}", profileId, ex.Message);
+            throw;
+        }
     }
 
     public async Task StopContainerAsync(string containerId)

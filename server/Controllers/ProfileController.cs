@@ -196,6 +196,32 @@ public class ProfileController : ControllerBase
         }
     }
 
+    [HttpPost("{id}/reset-error")]
+    public async Task<IActionResult> ResetProfileError(int id)
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+
+            _logger.LogInformation("Resetting error status for profile {ProfileId} for user {UserId}", id, userId);
+
+            var result = await _profileService.ResetProfileErrorAsync(id, userId);
+
+            if (!result)
+            {
+                return BadRequest(new { message = "Failed to reset error status. Profile may not be in error state." });
+            }
+
+            _logger.LogInformation("Profile {ProfileId} error status reset successfully", id);
+            return Ok(new { message = "Error status reset. Profile can be started again." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting profile {ProfileId} error status", id);
+            return StatusCode(500, new { message = "Failed to reset error status" });
+        }
+    }
+
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateProfile(int id, [FromBody] UpdateProfileRequest request)
     {

@@ -313,8 +313,28 @@ public class ProfileService
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Failed to start profile {ProfileId}: {Error}", profileId, ex.Message);
-            profile.Status = ProfileStatus.Error;
+            
+            // Очищаем контейнер, если он был создан, но не запущен
+            if (!string.IsNullOrEmpty(profile.ContainerId))
+            {
+                try
+                {
+                    _logger.LogInformation("🧹 Cleaning up failed container {ContainerId}", profile.ContainerId);
+                    await _dockerService.DeleteContainerAsync(profile.ContainerId);
+                    profile.ContainerId = string.Empty;
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "⚠️ Failed to cleanup container {ContainerId}", profile.ContainerId);
+                }
+            }
+            
+            // Сбрасываем статус на Stopped, чтобы можно было попробовать снова
+            profile.Status = ProfileStatus.Stopped;
+            profile.ServerNodeIp = string.Empty;
+            profile.Port = 0;
             await _context.SaveChangesAsync();
+            
             return new StartProfileResult 
             { 
                 Success = false, 
@@ -322,6 +342,48 @@ public class ProfileService
                 Profile = profile
             };
         }
+    }
+
+    public async Task<bool> ResetProfileErrorAsync(int profileId, int userId)
+    {
+        _logger.LogInformation("🔄 Resetting error status for profile {ProfileId} for user {UserId}", profileId, userId);
+        
+        var profile = await GetProfileAsync(profileId, userId);
+        if (profile == null)
+        {
+            _logger.LogWarning("❌ Profile {ProfileId} not found", profileId);
+            return false;
+        }
+
+        if (profile.Status != ProfileStatus.Error)
+        {
+            _logger.LogWarning("⚠️ Profile {ProfileId} is not in Error status (current: {Status})", profileId, profile.Status);
+            return false;
+        }
+
+        // Очищаем контейнер, если он есть
+        if (!string.IsNullOrEmpty(profile.ContainerId))
+        {
+            try
+            {
+                _logger.LogInformation("🧹 Cleaning up container {ContainerId}", profile.ContainerId);
+                await _dockerService.DeleteContainerAsync(profile.ContainerId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "⚠️ Failed to cleanup container {ContainerId}", profile.ContainerId);
+            }
+        }
+
+        // Сбрасываем статус
+        profile.Status = ProfileStatus.Stopped;
+        profile.ContainerId = string.Empty;
+        profile.ServerNodeIp = string.Empty;
+        profile.Port = 0;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("✅ Profile {ProfileId} error status reset", profileId);
+        return true;
     }
 
     public async Task<bool> StopProfileAsync(int profileId, int userId)
@@ -373,8 +435,25 @@ public class ProfileService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to stop profile {ProfileId}", profileId);
-            profile.Status = ProfileStatus.Error;
+            _logger.LogError(ex, "❌ Failed to stop profile {ProfileId}: {Error}", profileId, ex.Message);
+            
+            // Пытаемся принудительно остановить и удалить контейнер
+            if (!string.IsNullOrEmpty(profile.ContainerId))
+            {
+                try
+                {
+                    _logger.LogInformation("🧹 Force cleaning up container {ContainerId}", profile.ContainerId);
+                    await _dockerService.DeleteContainerAsync(profile.ContainerId);
+                    profile.ContainerId = string.Empty;
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "⚠️ Failed to cleanup container {ContainerId}", profile.ContainerId);
+                }
+            }
+            
+            // Устанавливаем статус Stopped вместо Error, чтобы можно было попробовать снова
+            profile.Status = ProfileStatus.Stopped;
             await _context.SaveChangesAsync();
             return false;
         }

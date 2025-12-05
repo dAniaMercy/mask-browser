@@ -18,12 +18,15 @@ x11vnc -display :99 -nopw -listen 109.172.101.73 -xkb -forever -shared &
 websockify --web=/usr/share/novnc 6080 109.172.101.73:5900 &
 
 # Start Chromium with profile
-mkdir -p /tmp/profile-${PROFILE_ID}
+# Используем постоянное хранилище для сохранения данных профиля (монтируется через Docker volume)
+PROFILE_DATA_DIR="/app/data/profile"
+mkdir -p "${PROFILE_DATA_DIR}"
+
 chromium-browser \
     --no-sandbox \
     --disable-dev-shm-usage \
     --disable-gpu \
-    --user-data-dir=/tmp/profile-${PROFILE_ID} \
+    --user-data-dir="${PROFILE_DATA_DIR}" \
     --remote-debugging-port=9222 \
     --remote-allow-origins=* \
     --disable-web-security \

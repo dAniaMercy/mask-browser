@@ -106,13 +106,22 @@ public class DockerService
                 // Продолжаем попытку создания контейнера, возможно образ есть
             }
 
+            // Создаем bind mount для сохранения данных профиля на хосте
+            // Данные будут сохраняться в /var/lib/maskbrowser/profiles/{profileId} на хосте
+            var hostProfilePath = _configuration["Docker:ProfileDataPath"] ?? $"/var/lib/maskbrowser/profiles/{profileId}";
+            var containerProfilePath = "/app/data/profile";
+            
+            _logger.LogInformation("💾 Profile data will be saved to: {HostPath} -> {ContainerPath}", hostProfilePath, containerProfilePath);
+            
             var createParams = new CreateContainerParameters
             {
                 Image = imageName,
                 Name = containerName,
                 ExposedPorts = new Dictionary<string, EmptyStruct>
                 {
-                    { "8080/tcp", new EmptyStruct() }
+                    { "8080/tcp", new EmptyStruct() },
+                    { "5900/tcp", new EmptyStruct() },
+                    { "6080/tcp", new EmptyStruct() }
                 },
                 HostConfig = new HostConfig
                 {
@@ -129,6 +138,10 @@ public class DockerService
                                 }
                             }
                         }
+                    },
+                    Binds = new List<string>
+                    {
+                        $"{hostProfilePath}:{containerProfilePath}"
                     },
                     Memory = 512 * 1024 * 1024, // 512MB
                     MemorySwap = 512 * 1024 * 1024,

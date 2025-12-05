@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Linq;
 using MaskBrowser.Server.Infrastructure;
@@ -39,7 +40,44 @@ builder.Services.AddControllers()
         };
     });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "MaskBrowser API",
+        Version = "v1",
+        Description = "MaskBrowser API Documentation",
+        Contact = new OpenApiContact
+        {
+            Name = "MaskBrowser Support"
+        }
+    });
+
+    // Добавляем JWT авторизацию в Swagger
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 // Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -107,14 +145,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// CORS - ВАЖНО: разрешаем все источники для разработки
+// CORS - Указываем конкретные origins для работы с credentials
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy.WithOrigins(
+                "http://109.172.101.73:5052",
+                "http://localhost:5052",
+                "http://localhost:3000",
+                "https://109.172.101.73"
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials(); // ВАЖНО: для работы с credentials: 'include'
     });
 });
 
@@ -144,7 +188,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend");
 
 // Логирование входящих запросов
 app.Use(async (context, next) =>
@@ -162,11 +206,15 @@ app.UseHttpMetrics();
 app.MapMetrics();
 
 // Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
+// Swagger доступен всегда для удобства разработки
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "MaskBrowser API v1");
+    options.RoutePrefix = "swagger"; // Доступ по /swagger
+    options.DisplayRequestDuration();
+    options.EnableTryItOutByDefault();
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

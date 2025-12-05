@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Logging;
 using System.Text;
+using System.Linq;
 using MaskBrowser.Server.Infrastructure;
 using MaskBrowser.Server.Services;
 using MaskBrowser.Server.BackgroundJobs;
@@ -14,7 +15,28 @@ var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 
 // Add services
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Возвращаем детальные ошибки валидации
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogWarning("Model validation failed: {Errors}", 
+                string.Join(", ", context.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+            
+            return new BadRequestObjectResult(new
+            {
+                message = "Validation failed",
+                errors = context.ModelState
+                    .Where(x => x.Value?.Errors.Count > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value?.Errors.Select(e => e.ErrorMessage).ToArray()
+                    )
+            });
+        };
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -122,6 +144,17 @@ using (var scope = app.Services.CreateScope())
 
 // ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
 app.UseCors("AllowAll");
+
+// Логирование входящих запросов
+app.Use(async (context, next) =>
+{
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Incoming request: {Method} {Path} from {RemoteIp}", 
+        context.Request.Method, 
+        context.Request.Path,
+        context.Connection.RemoteIpAddress);
+    await next();
+});
 
 // Prometheus endpoint
 app.UseHttpMetrics();

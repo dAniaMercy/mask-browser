@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MaskBrowser.Server.Models;
 using MaskBrowser.Server.Services;
+using System.ComponentModel.DataAnnotations;
 
 namespace MaskBrowser.Server.Controllers;
 
@@ -19,40 +20,92 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-public async Task<IActionResult> Register([FromBody] RegisterRequest request)
-{
-    try
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
-        if (user == null)
+        try
         {
-            return BadRequest(new { message = "User already exists" });
-        }
+            _logger.LogInformation("Registration attempt: Email={Email}, Username={Username}", 
+                request?.Email ?? "null", request?.Username ?? "null");
 
-        var token = _authService.GenerateJwtToken(user);
-        return Ok(new
-        {
-            token,
-            user = new
+            // Проверка ModelState
+            if (!ModelState.IsValid)
             {
-                user.Id,
-                user.Username,
-                user.Email
+                _logger.LogWarning("Invalid model state: {Errors}", 
+                    string.Join(", ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage)));
+                return BadRequest(new { message = "Invalid request data", errors = ModelState });
             }
-        });
+
+            // Проверка на null
+            if (request == null)
+            {
+                _logger.LogWarning("Register request is null");
+                return BadRequest(new { message = "Request body is required" });
+            }
+
+            // Валидация полей
+            if (string.IsNullOrWhiteSpace(request.Username))
+            {
+                return BadRequest(new { message = "Username is required" });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                return BadRequest(new { message = "Email is required" });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Password))
+            {
+                return BadRequest(new { message = "Password is required" });
+            }
+
+            if (request.Password.Length < 6)
+            {
+                return BadRequest(new { message = "Password must be at least 6 characters long" });
+            }
+
+            var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
+            if (user == null)
+            {
+                _logger.LogWarning("Registration failed: User already exists - Email={Email}, Username={Username}", 
+                    request.Email, request.Username);
+                return BadRequest(new { message = "User already exists" });
+            }
+
+            var token = _authService.GenerateJwtToken(user);
+            _logger.LogInformation("User registered successfully: Id={UserId}, Username={Username}, Email={Email}", 
+                user.Id, user.Username, user.Email);
+
+            return Ok(new
+            {
+                token,
+                user = new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Registration failed for Email={Email}, Username={Username}", 
+                request?.Email ?? "unknown", request?.Username ?? "unknown");
+            return StatusCode(500, new { message = "Server error during registration", error = ex.Message });
+        }
     }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Registration failed for {Email}", request.Email);
-        // Возвращаем 500 и текст ошибки (на dev можно вернуть ex.Message; в prod осторожно)
-        return StatusCode(500, new { message = "Server error during registration", error = ex.Message });
-    }
-}
 
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+        _logger.LogInformation("Login attempt: Email={Email}", request?.Email ?? "null");
+
+        if (!ModelState.IsValid || request == null)
+        {
+            _logger.LogWarning("Invalid login request");
+            return BadRequest(new { message = "Invalid request data", errors = ModelState });
+        }
+
         var result = await _authService.LoginAsync(request.Email, request.Password, request.TwoFactorCode);
 
         if (!result.Success)
@@ -134,15 +187,29 @@ public async Task<IActionResult> Register([FromBody] RegisterRequest request)
 
 public class RegisterRequest
 {
+    [Required(ErrorMessage = "Username is required")]
+    [MinLength(3, ErrorMessage = "Username must be at least 3 characters")]
+    [MaxLength(50, ErrorMessage = "Username must not exceed 50 characters")]
     public string Username { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Email is required")]
+    [EmailAddress(ErrorMessage = "Invalid email format")]
     public string Email { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Password is required")]
+    [MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
     public string Password { get; set; } = string.Empty;
 }
 
 public class LoginRequest
 {
+    [Required(ErrorMessage = "Email is required")]
+    [EmailAddress(ErrorMessage = "Invalid email format")]
     public string Email { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Password is required")]
     public string Password { get; set; } = string.Empty;
+
     public string? TwoFactorCode { get; set; }
 }
 

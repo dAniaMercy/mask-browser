@@ -128,18 +128,19 @@ public class ProfileController : ControllerBase
 
             var result = await _profileService.StartProfileAsync(id, userId);
 
-            if (!result)
+            if (!result.Success)
             {
-                return BadRequest(new { message = "Failed to start profile. Profile may already be running or not found." });
+                _logger.LogWarning("Failed to start profile {ProfileId}: {Reason}", id, result.ErrorMessage);
+                return BadRequest(new { message = result.ErrorMessage ?? "Failed to start profile" });
             }
 
             _logger.LogInformation("Profile {ProfileId} started successfully", id);
-            return Ok(new { message = "Profile started" });
+            return Ok(new { message = "Profile started", profile = ToDto(result.Profile!) });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error starting profile {ProfileId}", id);
-            return StatusCode(500, new { message = "Failed to start profile" });
+            return StatusCode(500, new { message = "Failed to start profile", error = ex.Message });
         }
     }
 

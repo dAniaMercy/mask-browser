@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using MaskBrowser.Server.Infrastructure;
 using MaskBrowser.Server.Models;
 
@@ -11,6 +12,7 @@ public class ProfileService
     private readonly LoadBalancerService _loadBalancerService;
     private readonly RabbitMQService _rabbitMQ;
     private readonly KafkaService _kafkaService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ProfileService> _logger;
 
     public ProfileService(
@@ -19,6 +21,7 @@ public class ProfileService
         LoadBalancerService loadBalancerService,
         RabbitMQService rabbitMQ,
         KafkaService kafkaService,
+        IConfiguration configuration,
         ILogger<ProfileService> logger)
     {
         _context = context;
@@ -26,6 +29,7 @@ public class ProfileService
         _loadBalancerService = loadBalancerService;
         _rabbitMQ = rabbitMQ;
         _kafkaService = kafkaService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -174,29 +178,56 @@ public class ProfileService
         return profile;
     }
 
-    public async Task<bool> StartProfileAsync(int profileId, int userId)
+    public async Task<StartProfileResult> StartProfileAsync(int profileId, int userId)
     {
         _logger.LogInformation("▶️ Starting profile {ProfileId} for user {UserId}", profileId, userId);
         
         var profile = await GetProfileAsync(profileId, userId);
         if (profile == null)
         {
-            _logger.LogWarning("❌ Profile {ProfileId} not found", profileId);
-            return false;
+            _logger.LogWarning("❌ Profile {ProfileId} not found for user {UserId}", profileId, userId);
+            return new StartProfileResult 
+            { 
+                Success = false, 
+                ErrorMessage = "Profile not found" 
+            };
         }
 
         if (profile.Status == ProfileStatus.Running)
         {
             _logger.LogWarning("⚠️ Profile {ProfileId} already running", profileId);
-            return false;
+            return new StartProfileResult 
+            { 
+                Success = false, 
+                ErrorMessage = "Profile is already running",
+                Profile = profile
+            };
         }
 
-        // Select server node
+        // Select server node - если нет нод, создаем локальную
         var node = await _loadBalancerService.SelectNodeAsync();
         if (node == null)
         {
-            _logger.LogWarning("❌ No available nodes for profile {ProfileId}", profileId);
-            return false;
+            _logger.LogWarning("❌ No available nodes for profile {ProfileId}, creating local node", profileId);
+            
+            // Получаем IP сервера из конфигурации
+            var serverIp = _configuration["ServerIP"] ?? "127.0.0.1";
+            
+            // Создаем локальную ноду автоматически
+            await _loadBalancerService.RegisterNodeAsync("local-node", serverIp, 1000);
+            _logger.LogInformation("✅ Created local node: {ServerIp}", serverIp);
+            
+            // Пробуем снова выбрать ноду
+            node = await _loadBalancerService.SelectNodeAsync();
+            if (node == null)
+            {
+                _logger.LogError("❌ Failed to create or select node for profile {ProfileId}", profileId);
+                return new StartProfileResult 
+                { 
+                    Success = false, 
+                    ErrorMessage = "No server nodes available. Please contact administrator." 
+                };
+            }
         }
 
         _logger.LogInformation("🖥️ Selected node: {NodeIp}", node.IpAddress);
@@ -245,14 +276,23 @@ public class ProfileService
 
             _logger.LogInformation("✅ Profile {ProfileId} started successfully on {NodeIp}:{Port}", 
                 profileId, node.IpAddress, profile.Port);
-            return true;
+            return new StartProfileResult 
+            { 
+                Success = true, 
+                Profile = profile 
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to start profile {ProfileId}", profileId);
+            _logger.LogError(ex, "❌ Failed to start profile {ProfileId}: {Error}", profileId, ex.Message);
             profile.Status = ProfileStatus.Error;
             await _context.SaveChangesAsync();
-            return false;
+            return new StartProfileResult 
+            { 
+                Success = false, 
+                ErrorMessage = $"Failed to start profile: {ex.Message}",
+                Profile = profile
+            };
         }
     }
 
@@ -347,4 +387,11 @@ public class ProfileService
         _logger.LogInformation("✅ Profile {ProfileId} deleted successfully", profileId);
         return true;
     }
+}
+
+public class StartProfileResult
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public BrowserProfile? Profile { get; set; }
 }

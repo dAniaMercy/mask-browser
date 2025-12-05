@@ -33,6 +33,11 @@ public class LoadBalancerService
             _configuration.GetValue<int>("LoadBalancer:HealthCheckIntervalSeconds", 30)
         );
 
+        _logger.LogDebug("Selecting node with health check interval: {Interval} seconds", healthCheckInterval.TotalSeconds);
+
+        var allNodes = await _context.ServerNodes.ToListAsync();
+        _logger.LogDebug("Total nodes in database: {Count}", allNodes.Count);
+
         var healthyNodes = await _context.ServerNodes
             .Where(n => n.IsHealthy &&
                        n.ActiveContainers < n.MaxContainers &&
@@ -41,11 +46,19 @@ public class LoadBalancerService
             .ThenBy(n => n.CpuUsage)
             .ToListAsync();
 
+        _logger.LogDebug("Healthy nodes found: {Count}", healthyNodes.Count);
+
         var node = healthyNodes.FirstOrDefault();
 
         if (node == null)
         {
-            _logger.LogWarning("No healthy nodes available");
+            _logger.LogWarning("No healthy nodes available. Checking all nodes...");
+            foreach (var n in allNodes)
+            {
+                var timeSinceCheck = DateTime.UtcNow - n.LastHealthCheck;
+                _logger.LogWarning("Node {Ip}: Healthy={Healthy}, Active={Active}/{Max}, LastCheck={LastCheck} ({Age}s ago)", 
+                    n.IpAddress, n.IsHealthy, n.ActiveContainers, n.MaxContainers, n.LastHealthCheck, timeSinceCheck.TotalSeconds);
+            }
             return null;
         }
 

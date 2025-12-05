@@ -212,16 +212,37 @@ public class ProfileService
             
             // Получаем IP сервера из конфигурации
             var serverIp = _configuration["ServerIP"] ?? "127.0.0.1";
+            _logger.LogInformation("🔧 Server IP from config: {ServerIp}", serverIp);
             
             // Создаем локальную ноду автоматически
             await _loadBalancerService.RegisterNodeAsync("local-node", serverIp, 1000);
-            _logger.LogInformation("✅ Created local node: {ServerIp}", serverIp);
+            _logger.LogInformation("✅ Registered local node: {ServerIp}", serverIp);
+            
+            // Обновляем LastHealthCheck чтобы нода сразу была доступна
+            var registeredNode = await _context.ServerNodes
+                .FirstOrDefaultAsync(n => n.IpAddress == serverIp);
+            if (registeredNode != null)
+            {
+                registeredNode.LastHealthCheck = DateTime.UtcNow;
+                registeredNode.IsHealthy = true;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("✅ Updated node health: {ServerIp}", serverIp);
+            }
             
             // Пробуем снова выбрать ноду
             node = await _loadBalancerService.SelectNodeAsync();
             if (node == null)
             {
-                _logger.LogError("❌ Failed to create or select node for profile {ProfileId}", profileId);
+                _logger.LogError("❌ Failed to create or select node for profile {ProfileId}. Checking all nodes...", profileId);
+                
+                // Диагностика: проверяем все ноды
+                var allNodes = await _context.ServerNodes.ToListAsync();
+                foreach (var n in allNodes)
+                {
+                    _logger.LogWarning("Node: {Ip}, Healthy: {Healthy}, LastCheck: {LastCheck}, Active: {Active}/{Max}", 
+                        n.IpAddress, n.IsHealthy, n.LastHealthCheck, n.ActiveContainers, n.MaxContainers);
+                }
+                
                 return new StartProfileResult 
                 { 
                     Success = false, 

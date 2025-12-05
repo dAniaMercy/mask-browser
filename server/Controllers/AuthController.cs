@@ -177,11 +177,22 @@ public class AuthController : ControllerBase
 
     [HttpGet("me")]
     [Authorize]
-    public async Task<IActionResult> GetMe()
+    public IActionResult GetMe()
     {
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
-        // Return user info
-        return Ok(new { userId });
+        var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+        var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        var isAdmin = User.IsInRole("Admin");
+        var twoFactorEnabled = User.FindFirst("TwoFactorEnabled")?.Value == "True";
+        
+        return Ok(new 
+        { 
+            userId,
+            username,
+            email,
+            isAdmin,
+            twoFactorEnabled
+        });
     }
 }
 

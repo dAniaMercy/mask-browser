@@ -2,6 +2,7 @@ using Docker.DotNet;
 using Docker.DotNet.Models;
 using MaskBrowser.Server.Models;
 using System.Text.Json;
+using System.Threading;
 
 namespace MaskBrowser.Server.Services;
 
@@ -99,7 +100,9 @@ public class DockerService
             CreateContainerResponse response;
             try
             {
-                response = await _dockerClient.Containers.CreateContainerAsync(createParams);
+                _logger.LogInformation("📦 Calling Docker API to create container...");
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2)); // 2 минуты таймаут
+                response = await _dockerClient.Containers.CreateContainerAsync(createParams, cts.Token);
                 _logger.LogInformation("✅ Container created: {ContainerId} for profile {ProfileId}", response.ID, profileId);
             }
             catch (DockerApiException ex)
@@ -107,10 +110,17 @@ public class DockerService
                 _logger.LogError(ex, "❌ Docker API error creating container: {StatusCode} - {Message}", ex.StatusCode, ex.ResponseBody);
                 throw new InvalidOperationException($"Failed to create Docker container: {ex.ResponseBody}", ex);
             }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "❌ Timeout creating Docker container for profile {ProfileId}", profileId);
+                throw new InvalidOperationException("Timeout creating Docker container", ex);
+            }
 
             try
             {
-                await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters());
+                _logger.LogInformation("🚀 Starting container {ContainerId}...", response.ID);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // 1 минута таймаут
+                await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters(), cts.Token);
                 _logger.LogInformation("✅ Container started: {ContainerId}", response.ID);
             }
             catch (DockerApiException ex)
@@ -123,6 +133,17 @@ public class DockerService
                 }
                 catch { }
                 throw new InvalidOperationException($"Failed to start Docker container: {ex.ResponseBody}", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "❌ Timeout starting Docker container {ContainerId}", response.ID);
+                // Пытаемся удалить контейнер
+                try
+                {
+                    await _dockerClient.Containers.RemoveContainerAsync(response.ID, new ContainerRemoveParameters { Force = true });
+                }
+                catch { }
+                throw new InvalidOperationException("Timeout starting Docker container", ex);
             }
 
             return response.ID;

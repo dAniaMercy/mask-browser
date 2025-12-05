@@ -226,10 +226,16 @@ public class ProfileService
                 registeredNode.LastHealthCheck = DateTime.UtcNow;
                 registeredNode.IsHealthy = true;
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("✅ Updated node health: {ServerIp}", serverIp);
+                _logger.LogInformation("✅ Updated node health: {ServerIp}, LastCheck={LastCheck}", 
+                    serverIp, registeredNode.LastHealthCheck);
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Node {ServerIp} not found after registration", serverIp);
             }
             
             // Пробуем снова выбрать ноду
+            _logger.LogInformation("🔍 Attempting to select node again...");
             node = await _loadBalancerService.SelectNodeAsync();
             if (node == null)
             {
@@ -255,10 +261,11 @@ public class ProfileService
 
         profile.Status = ProfileStatus.Starting;
         await _context.SaveChangesAsync();
+        _logger.LogInformation("📝 Profile status set to Starting");
 
         try
         {
-            _logger.LogInformation("🐳 Creating Docker container for profile {ProfileId}", profileId);
+            _logger.LogInformation("🐳 Creating Docker container for profile {ProfileId} on node {NodeIp}", profileId, node.IpAddress);
             
             var containerId = await _dockerService.CreateBrowserContainerAsync(
                 profileId,

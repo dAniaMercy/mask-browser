@@ -104,23 +104,40 @@ public class LoadBalancerService
             _context.ServerNodes.Add(node);
             await _context.SaveChangesAsync();
             
-            // Publish event to Kafka
-            await _kafkaService.PublishProfileEventAsync("profile-events", new
+            // Publish event to Kafka (неблокирующе)
+            _ = Task.Run(async () =>
             {
-                EventType = "NodeRegistered",
-                NodeIp = ipAddress,
-                NodeName = name,
-                MaxContainers = maxContainers,
-                Timestamp = DateTime.UtcNow
+                try
+                {
+                    await _kafkaService.PublishProfileEventAsync("profile-events", new
+                    {
+                        EventType = "NodeRegistered",
+                        NodeIp = ipAddress,
+                        NodeName = name,
+                        MaxContainers = maxContainers,
+                        Timestamp = DateTime.UtcNow
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to publish node registration to Kafka");
+                }
             });
             
-            // Publish to RabbitMQ for instant notification
-            _rabbitMQService.Publish("scaling.node.registered", new
+            // Publish to RabbitMQ for instant notification (неблокирующе)
+            try
             {
-                Ip = ipAddress,
-                Name = name,
-                Capacity = maxContainers
-            });
+                _rabbitMQService.Publish("scaling.node.registered", new
+                {
+                    Ip = ipAddress,
+                    Name = name,
+                    Capacity = maxContainers
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to publish node registration to RabbitMQ");
+            }
             
             _logger.LogInformation("Node registered: {NodeIp}", ipAddress);
         }
@@ -131,12 +148,23 @@ public class LoadBalancerService
             existingNode.LastHealthCheck = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             
-            await _kafkaService.PublishProfileEventAsync("profile-events", new
+            // Publish event to Kafka (неблокирующе)
+            _ = Task.Run(async () =>
             {
-                EventType = "NodeUpdated",
-                NodeIp = ipAddress,
-                MaxContainers = maxContainers,
-                Timestamp = DateTime.UtcNow
+                try
+                {
+                    await _kafkaService.PublishProfileEventAsync("profile-events", new
+                    {
+                        EventType = "NodeUpdated",
+                        NodeIp = ipAddress,
+                        MaxContainers = maxContainers,
+                        Timestamp = DateTime.UtcNow
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to publish node update to Kafka");
+                }
             });
             
             _logger.LogInformation("Node updated: {NodeIp}", ipAddress);

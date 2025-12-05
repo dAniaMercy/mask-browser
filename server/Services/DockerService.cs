@@ -59,6 +59,53 @@ public class DockerService
 
             _logger.LogInformation("🐳 Creating container for profile {ProfileId} with image {Image}", profileId, imageName);
 
+            // Проверяем наличие образа
+            try
+            {
+                var images = await _dockerClient.Images.ListImagesAsync(new ImagesListParameters
+                {
+                    Filters = new Dictionary<string, IDictionary<string, bool>>
+                    {
+                        { "reference", new Dictionary<string, bool> { { imageName, true } } }
+                    }
+                });
+
+                if (!images.Any())
+                {
+                    _logger.LogWarning("⚠️ Image {Image} not found. Attempting to pull...", imageName);
+                    try
+                    {
+                        await _dockerClient.Images.CreateImageAsync(
+                            new ImagesCreateParameters { FromImage = imageName.Split(':')[0], Tag = imageName.Split(':').Length > 1 ? imageName.Split(':')[1] : "latest" },
+                            new AuthConfig(),
+                            new Progress<JSONMessage>(msg => 
+                            {
+                                if (!string.IsNullOrEmpty(msg.Status))
+                                    _logger.LogInformation("Docker pull: {Status}", msg.Status);
+                            })
+                        );
+                        _logger.LogInformation("✅ Image {Image} pulled successfully", imageName);
+                    }
+                    catch (Exception pullEx)
+                    {
+                        _logger.LogError(pullEx, "❌ Failed to pull image {Image}. Image needs to be built manually.", imageName);
+                        throw new InvalidOperationException(
+                            $"Docker image '{imageName}' not found and could not be pulled. " +
+                            $"Please build it manually: docker build -t {imageName} -f infra/Dockerfile.browser infra/", 
+                            pullEx);
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation("✅ Image {Image} found locally", imageName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error checking for image {Image}", imageName);
+                // Продолжаем попытку создания контейнера, возможно образ есть
+            }
+
             var createParams = new CreateContainerParameters
             {
                 Image = imageName,
@@ -108,6 +155,16 @@ public class DockerService
             catch (DockerApiException ex)
             {
                 _logger.LogError(ex, "❌ Docker API error creating container: {StatusCode} - {Message}", ex.StatusCode, ex.ResponseBody);
+                
+                // Проверяем, если ошибка связана с отсутствием образа
+                if (ex.ResponseBody?.Contains("No such image") == true || ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    var errorMessage = $"Docker image '{imageName}' not found. " +
+                        $"Please build it first: docker build -t {imageName} -f infra/Dockerfile.browser infra/";
+                    _logger.LogError(errorMessage);
+                    throw new InvalidOperationException(errorMessage, ex);
+                }
+                
                 throw new InvalidOperationException($"Failed to create Docker container: {ex.ResponseBody}", ex);
             }
             catch (TaskCanceledException ex)

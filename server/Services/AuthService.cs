@@ -54,8 +54,9 @@ public class AuthService
         {
             UserId = user.Id,
             Tier = SubscriptionTier.Free,
-            MaxProfiles = 1,
-            StartDate = DateTime.UtcNow
+            MaxProfiles = 3, // Бесплатно 3 профиля
+            StartDate = DateTime.UtcNow,
+            IsActive = true
         };
         _context.Subscriptions.Add(subscription);
         await _context.SaveChangesAsync();

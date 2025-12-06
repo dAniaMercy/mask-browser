@@ -93,6 +93,15 @@ public class ProfileService
                     throw;
                 }
             }
+            // Обновляем существующие Free подписки с лимитом 1 до 3
+            else if (user.Subscription.Tier == SubscriptionTier.Free && user.Subscription.MaxProfiles < 3)
+            {
+                _logger.LogInformation("🔄 Updating Free subscription limit from {Old} to 3 for user {UserId}", 
+                    user.Subscription.MaxProfiles, userId);
+                user.Subscription.MaxProfiles = 3;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("✅ Subscription limit updated");
+            }
 
             _logger.LogInformation("📊 Subscription: Tier={Tier}, Max={Max}", 
                 user.Subscription.Tier, user.Subscription.MaxProfiles);

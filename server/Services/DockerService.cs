@@ -316,8 +316,36 @@ public class DockerService
 
     public async Task StopContainerAsync(string containerId)
     {
-        await _dockerClient.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
-        _logger.LogInformation("Container stopped: {ContainerId}", containerId);
+        try
+        {
+            _logger.LogInformation("🛑 Stopping container {ContainerId}...", containerId);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)); // 30 секунд таймаут
+            await _dockerClient.Containers.StopContainerAsync(
+                containerId, 
+                new ContainerStopParameters { WaitBeforeKillSeconds = 10 },
+                cts.Token);
+            _logger.LogInformation("✅ Container stopped: {ContainerId}", containerId);
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogWarning(ex, "⚠️ Timeout stopping container {ContainerId}, forcing stop...", containerId);
+            // Принудительная остановка
+            try
+            {
+                await _dockerClient.Containers.KillContainerAsync(containerId, new ContainerKillParameters());
+                _logger.LogInformation("✅ Container force-killed: {ContainerId}", containerId);
+            }
+            catch (Exception killEx)
+            {
+                _logger.LogError(killEx, "❌ Failed to force-kill container {ContainerId}", containerId);
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Failed to stop container {ContainerId}: {Error}", containerId, ex.Message);
+            throw;
+        }
     }
 
     public async Task DeleteContainerAsync(string containerId)

@@ -4,6 +4,15 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import axios from 'axios';
 
+interface Subscription {
+  tier: string;
+  tierValue: number;
+  maxProfiles: number;
+  isActive: boolean;
+  startDate: string;
+  endDate: string | null;
+}
+
 interface User {
   id: number;
   username: string;
@@ -11,6 +20,7 @@ interface User {
   isAdmin?: boolean;
   requires2FA?: boolean;
   twoFactorEnabled?: boolean;
+  subscription?: Subscription | null;
 }
 
 interface AuthState {

@@ -138,6 +138,21 @@ export default function AccountPage() {
                   </div>
                 </div>
               )}
+
+              <div className="flex items-center space-x-3 p-3 bg-purple-50 dark:bg-purple-900/20 rounded">
+                <Calendar className="w-5 h-5 text-purple-600" />
+                <div>
+                  <p className="text-sm text-purple-600 dark:text-purple-400">Подписка</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <a 
+                      href="/dashboard/subscription" 
+                      className="hover:underline text-purple-600 dark:text-purple-400"
+                    >
+                      Управление подпиской →
+                    </a>
+                  </p>
+                </div>
+              </div>
             </div>
           </motion.div>
 

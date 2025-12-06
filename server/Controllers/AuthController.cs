@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MaskBrowser.Server.Models;
 using MaskBrowser.Server.Services;
+using MaskBrowser.Server.Infrastructure;
 using System.ComponentModel.DataAnnotations;
 
 namespace MaskBrowser.Server.Controllers;
@@ -11,11 +13,13 @@ namespace MaskBrowser.Server.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AuthService _authService;
+    private readonly ApplicationDbContext _context;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AuthService authService, ILogger<AuthController> logger)
+    public AuthController(AuthService authService, ApplicationDbContext context, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _context = context;
         _logger = logger;
     }
 
@@ -177,7 +181,7 @@ public async Task<IActionResult> Register([FromBody] RegisterRequest request)
 
     [HttpGet("me")]
     [Authorize]
-    public IActionResult GetMe()
+    public async Task<IActionResult> GetMe()
     {
         var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
@@ -185,13 +189,29 @@ public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         var isAdmin = User.IsInRole("Admin");
         var twoFactorEnabled = User.FindFirst("TwoFactorEnabled")?.Value == "True";
         
+        // Получаем информацию о подписке
+        var subscription = await _context.Subscriptions
+            .FirstOrDefaultAsync(s => s.UserId == userId);
+        
+        var subscriptionInfo = subscription != null ? new
+        {
+            tier = subscription.Tier.ToString(),
+            tierValue = (int)subscription.Tier,
+            maxProfiles = subscription.MaxProfiles,
+            isActive = subscription.IsActive,
+            startDate = subscription.StartDate,
+            endDate = subscription.EndDate
+        } : null;
+        
         return Ok(new 
         { 
+            id = userId,
             userId,
             username,
             email,
             isAdmin,
-            twoFactorEnabled
+            twoFactorEnabled,
+            subscription = subscriptionInfo
         });
     }
 }

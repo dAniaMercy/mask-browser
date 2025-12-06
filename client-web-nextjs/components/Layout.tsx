@@ -44,6 +44,12 @@ export default function Layout({ children }: LayoutProps) {
               >
                 {t('common.dashboard')}
               </Link>
+              <Link
+                href="/dashboard/subscription"
+                className="text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400"
+              >
+                Подписка
+              </Link>
               {isAdmin && authenticated && (
                 <Link
                   href="/admin"

@@ -17,6 +17,12 @@ export default function DashboardPage() {
   const { t } = useTranslation();
 
   useEffect(() => {
+    // Восстанавливаем авторизацию из localStorage
+    const { hydrate } = useAuthStore.getState();
+    hydrate();
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
       return;

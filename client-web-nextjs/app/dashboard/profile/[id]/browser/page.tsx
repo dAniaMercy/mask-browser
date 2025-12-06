@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
-import Layout from '@/components/Layout';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 export default function BrowserPage() {
@@ -17,6 +16,12 @@ export default function BrowserPage() {
   const [error, setError] = useState<string | null>(null);
   const [vncUrl, setVncUrl] = useState<string | null>(null);
   const vncContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Восстанавливаем авторизацию из localStorage
+    const { hydrate } = useAuthStore.getState();
+    hydrate();
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -58,6 +63,14 @@ export default function BrowserPage() {
         // noVNC клиент должен подключаться через WebSocket
         const vncUrl = `http://${profile.serverNodeIp}:${profile.port}/vnc.html?autoconnect=true&resize=scale&password=`;
         
+        console.log('🌐 VNC URL:', vncUrl);
+        console.log('📊 Profile data:', { 
+          id: profile.id, 
+          status: profile.status, 
+          port: profile.port, 
+          serverNodeIp: profile.serverNodeIp 
+        });
+        
         setVncUrl(vncUrl);
         setLoading(false);
       } catch (err) {
@@ -73,6 +86,8 @@ export default function BrowserPage() {
   useEffect(() => {
     if (!vncUrl || !vncContainerRef.current) return;
 
+    console.log('🖼️ Creating iframe with URL:', vncUrl);
+
     // Создаем iframe для noVNC
     const iframe = document.createElement('iframe');
     iframe.src = vncUrl;
@@ -80,11 +95,29 @@ export default function BrowserPage() {
     iframe.style.height = '100%';
     iframe.style.border = 'none';
     iframe.setAttribute('allow', 'fullscreen');
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    
+    iframe.onload = () => {
+      console.log('✅ iframe loaded successfully');
+    };
+    
+    iframe.onerror = (error) => {
+      console.error('❌ iframe error:', error);
+      setError('Не удалось загрузить браузер. Проверьте, что профиль запущен и порт доступен.');
+    };
+    
+    // Таймаут для проверки загрузки
+    const timeout = setTimeout(() => {
+      if (iframe.contentDocument?.readyState !== 'complete') {
+        console.warn('⚠️ iframe loading timeout');
+      }
+    }, 10000);
     
     vncContainerRef.current.innerHTML = '';
     vncContainerRef.current.appendChild(iframe);
 
     return () => {
+      clearTimeout(timeout);
       if (vncContainerRef.current) {
         vncContainerRef.current.innerHTML = '';
       }
@@ -95,45 +128,40 @@ export default function BrowserPage() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
-            <p className="text-gray-400">Загрузка браузера...</p>
-          </div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+          <p className="text-gray-400">Загрузка браузера...</p>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Layout>
-        <div className="container mx-auto px-4 py-8">
+      <div className="min-h-screen bg-gray-900 p-8">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="mb-4 flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Назад к профилям</span>
+        </button>
+        <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-6 text-center">
+          <p className="text-red-400 mb-4">{error}</p>
           <button
             onClick={() => router.push('/dashboard')}
-            className="mb-4 flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Назад к профилям</span>
+            Вернуться к профилям
           </button>
-          <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-6 text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
-            >
-              Вернуться к профилям
-            </button>
-          </div>
         </div>
-      </Layout>
+      </div>
     );
   }
 
   return (
-    <Layout>
-      <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-gray-900">
         <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
@@ -162,8 +190,7 @@ export default function BrowserPage() {
           </div>
         </div>
         <div ref={vncContainerRef} className="flex-1 bg-black overflow-hidden" />
-      </div>
-    </Layout>
+    </div>
   );
 }
 

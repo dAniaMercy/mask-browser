@@ -341,18 +341,37 @@ public class DockerService
         var container = await _dockerClient.Containers.InspectContainerAsync(containerId);
         if (container.NetworkSettings?.Ports != null)
         {
+            _logger.LogInformation("🔍 Checking ports for container {ContainerId}", containerId);
+            
+            // Логируем все доступные порты для отладки
+            foreach (var port in container.NetworkSettings.Ports)
+            {
+                _logger.LogInformation("📌 Port mapping: {Port} -> {Bindings}", 
+                    port.Key, 
+                    string.Join(", ", port.Value?.Select(b => $"{b.HostIP}:{b.HostPort}") ?? Array.Empty<string>()));
+            }
+            
             // Получаем порт 6080 (WebSocket для noVNC)
             if (container.NetworkSettings.Ports.TryGetValue("6080/tcp", out var webSocketBindings) &&
                 webSocketBindings != null && webSocketBindings.Count > 0)
             {
-                return int.Parse(webSocketBindings[0].HostPort);
+                var port = int.Parse(webSocketBindings[0].HostPort);
+                _logger.LogInformation("✅ Found port 6080 mapped to host port {HostPort}", port);
+                return port;
             }
+            
+            _logger.LogWarning("⚠️ Port 6080 not found in port mappings");
+            
             // Fallback на порт 8080, если 6080 не найден
             if (container.NetworkSettings.Ports.TryGetValue("8080/tcp", out var portBindings) &&
                 portBindings != null && portBindings.Count > 0)
             {
-                return int.Parse(portBindings[0].HostPort);
+                var port = int.Parse(portBindings[0].HostPort);
+                _logger.LogWarning("⚠️ Using fallback port 8080 mapped to host port {HostPort}", port);
+                return port;
             }
+            
+            _logger.LogError("❌ No ports found for container {ContainerId}", containerId);
         }
         return 0;
     }

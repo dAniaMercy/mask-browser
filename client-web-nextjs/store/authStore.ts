@@ -124,11 +124,13 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(() => localStorage),
       // Важно: восстанавливаем состояние после загрузки из localStorage
       onRehydrateStorage: () => (state) => {
-        if (state?.token && state?.user) {
+        if (!state) return;
+        
+        if (state.token && state.user) {
           axios.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
           // Убеждаемся, что isAuthenticated установлен правильно
           state.isAuthenticated = !!(state.token && state.user);
-          state.isAdmin = state.user?.isAdmin || false;
+          state.isAdmin = state.user.isAdmin || false;
         } else {
           // Если нет токена или пользователя, сбрасываем
           state.isAuthenticated = false;

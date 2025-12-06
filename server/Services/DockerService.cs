@@ -56,8 +56,12 @@ public class DockerService
             var containerName = $"maskbrowser-profile-{profileId}";
             var randomPort = new Random().Next(10000, 65535);
             var imageName = _configuration["Docker:BrowserImage"] ?? "maskbrowser/browser:latest";
+            var networkName = _configuration["Docker:NetworkName"] ?? "maskbrowser-network";
 
             _logger.LogInformation("🐳 Creating container for profile {ProfileId} with image {Image}", profileId, imageName);
+
+            // Проверяем и создаем сеть, если её нет
+            await EnsureNetworkExistsAsync(networkName);
 
             // Проверяем наличие образа
             bool imageExists = false;
@@ -177,7 +181,7 @@ public class DockerService
                     MemorySwap = 512 * 1024 * 1024,
                     NanoCPUs = 500_000_000, // 0.5 CPU
                     RestartPolicy = new RestartPolicy { Name = RestartPolicyKind.UnlessStopped },
-                    NetworkMode = _configuration["Docker:NetworkName"] ?? "maskbrowser-network"
+                    NetworkMode = networkName
                 },
                 Env = new List<string>
                 {
@@ -295,5 +299,56 @@ public class DockerService
             new ContainersListParameters { All = false }
         );
         return containers.Where(c => c.Names.Any(n => n.Contains("maskbrowser-profile"))).ToList();
+    }
+
+    private async Task EnsureNetworkExistsAsync(string networkName)
+    {
+        try
+        {
+            _logger.LogInformation("🔍 Checking if network '{NetworkName}' exists...", networkName);
+            
+            var networks = await _dockerClient.Networks.ListNetworksAsync();
+            var networkExists = networks.Any(n => n.Name == networkName);
+
+            if (!networkExists)
+            {
+                _logger.LogWarning("⚠️ Network '{NetworkName}' not found. Creating it...", networkName);
+                
+                var networkCreateParams = new NetworksCreateParameters
+                {
+                    Name = networkName,
+                    Driver = "bridge",
+                    EnableIPv6 = false,
+                    Internal = false,
+                    Attachable = true,
+                    CheckDuplicate = true
+                };
+
+                var response = await _dockerClient.Networks.CreateNetworkAsync(networkCreateParams);
+                _logger.LogInformation("✅ Network '{NetworkName}' created successfully with ID: {NetworkId}", networkName, response.ID);
+            }
+            else
+            {
+                _logger.LogInformation("✅ Network '{NetworkName}' already exists", networkName);
+            }
+        }
+        catch (DockerApiException ex)
+        {
+            // Если сеть уже существует (409 Conflict), это нормально
+            if (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _logger.LogInformation("✅ Network '{NetworkName}' already exists (detected by conflict)", networkName);
+            }
+            else
+            {
+                _logger.LogError(ex, "❌ Failed to create network '{NetworkName}': {Message}", networkName, ex.Message);
+                throw new InvalidOperationException($"Failed to create network '{networkName}': {ex.Message}", ex);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Unexpected error checking/creating network '{NetworkName}'", networkName);
+            throw new InvalidOperationException($"Failed to ensure network '{networkName}' exists: {ex.Message}", ex);
+        }
     }
 }

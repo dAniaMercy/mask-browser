@@ -22,7 +22,19 @@ export default function DashboardPage() {
       return;
     }
     fetchProfiles();
-  }, [isAuthenticated, fetchProfiles, router]);
+    
+    // Автоматическое обновление статусов профилей каждые 3 секунды
+    const interval = setInterval(() => {
+      const hasStartingOrStopping = profiles.some(
+        (p) => p.status === 'Starting' || p.status === 'Stopping'
+      );
+      if (hasStartingOrStopping) {
+        fetchProfiles();
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, fetchProfiles, router, profiles]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -103,24 +115,55 @@ export default function DashboardPage() {
                 {profile.status === 'Stopped' && (
                   <button
                     onClick={() => startProfile(profile.id)}
-                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white"
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Play className="w-4 h-4" />
                     <span>{t('common.start')}</span>
                   </button>
                 )}
+                {profile.status === 'Starting' && (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 rounded-lg text-white opacity-75 cursor-not-allowed"
+                  >
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Запуск...</span>
+                  </button>
+                )}
+                {profile.status === 'Stopping' && (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 rounded-lg text-white opacity-75 cursor-not-allowed"
+                  >
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Остановка...</span>
+                  </button>
+                )}
                 {profile.status === 'Running' && (
                   <button
                     onClick={() => stopProfile(profile.id)}
-                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white"
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Square className="w-4 h-4" />
                     <span>{t('common.stop')}</span>
                   </button>
                 )}
+                {profile.status === 'Error' && (
+                  <button
+                    onClick={() => startProfile(profile.id)}
+                    disabled={loading}
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>Повторить</span>
+                  </button>
+                )}
                 <button
                   onClick={() => deleteProfile(profile.id)}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"
+                  disabled={loading || profile.status === 'Starting' || profile.status === 'Running'}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

@@ -16,6 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Configuration
 var configuration = builder.Configuration;
 
+// Увеличиваем timeout для Kestrel (для долгих операций запуска профилей)
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(10);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(10);
+});
+
 // Add services
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -103,7 +110,7 @@ builder.Services.AddHttpClient<CyberneticsApiService>(client =>
 {
     var apiUrl = configuration["Cybernetics:ApiUrl"] ?? "https://api.cybernetics.com";
     client.BaseAddress = new Uri(apiUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromMinutes(5); // Увеличиваем timeout для запуска профилей
 });
 
 // Business Services

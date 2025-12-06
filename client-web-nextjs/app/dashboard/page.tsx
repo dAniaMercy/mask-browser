@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import Layout from '@/components/Layout';
-import { Plus, Play, Square, Trash2 } from 'lucide-react';
+import { Plus, Play, Square, Trash2, Monitor } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -161,14 +161,24 @@ export default function DashboardPage() {
                   </button>
                 )}
                 {profile.status === 'Running' && (
-                  <button
-                    onClick={() => stopProfile(profile.id)}
-                    disabled={loading}
-                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Square className="w-4 h-4" />
-                    <span>{t('common.stop')}</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => router.push(`/dashboard/profile/${profile.id}/browser`)}
+                      disabled={loading}
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Monitor className="w-4 h-4" />
+                      <span>Открыть браузер</span>
+                    </button>
+                    <button
+                      onClick={() => stopProfile(profile.id)}
+                      disabled={loading}
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Square className="w-4 h-4" />
+                      <span>{t('common.stop')}</span>
+                    </button>
+                  </>
                 )}
                 {profile.status === 'Error' && (
                   <button

@@ -55,6 +55,7 @@ public class DockerService
         {
             var containerName = $"maskbrowser-profile-{profileId}";
             var randomPort = new Random().Next(10000, 65535);
+            var randomVncPort = new Random().Next(10000, 65535);
             var imageName = _configuration["Docker:BrowserImage"] ?? "maskbrowser/browser:latest";
             var networkName = _configuration["Docker:NetworkName"] ?? "maskbrowser-network";
 
@@ -171,6 +172,17 @@ public class DockerService
                                     HostPort = randomPort.ToString()
                                 }
                             }
+                        },
+                        {
+                            "6080/tcp",
+                            new List<PortBinding>
+                            {
+                                new PortBinding
+                                {
+                                    HostIP = "0.0.0.0",
+                                    HostPort = randomVncPort.ToString()
+                                }
+                            }
                         }
                     },
                     Binds = new List<string>
@@ -284,11 +296,20 @@ public class DockerService
     public async Task<int> GetContainerPortAsync(string containerId)
     {
         var container = await _dockerClient.Containers.InspectContainerAsync(containerId);
-        if (container.NetworkSettings?.Ports != null &&
-            container.NetworkSettings.Ports.TryGetValue("8080/tcp", out var portBindings) &&
-            portBindings != null && portBindings.Count > 0)
+        if (container.NetworkSettings?.Ports != null)
         {
-            return int.Parse(portBindings[0].HostPort);
+            // Получаем порт 6080 (WebSocket для noVNC)
+            if (container.NetworkSettings.Ports.TryGetValue("6080/tcp", out var webSocketBindings) &&
+                webSocketBindings != null && webSocketBindings.Count > 0)
+            {
+                return int.Parse(webSocketBindings[0].HostPort);
+            }
+            // Fallback на порт 8080, если 6080 не найден
+            if (container.NetworkSettings.Ports.TryGetValue("8080/tcp", out var portBindings) &&
+                portBindings != null && portBindings.Count > 0)
+            {
+                return int.Parse(portBindings[0].HostPort);
+            }
         }
         return 0;
     }

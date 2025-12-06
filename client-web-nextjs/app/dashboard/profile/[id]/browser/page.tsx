@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
@@ -32,13 +32,22 @@ export default function BrowserPage() {
 
   useEffect(() => {
     if (!profileId || !isAuthenticated) return;
+    
+    // Флаг для предотвращения множественных вызовов
+    let isMounted = true;
 
     const loadProfile = async () => {
       try {
         setLoading(true);
         await fetchProfiles();
         
-        const profile = profiles.find(p => p.id === profileId);
+        // Небольшая задержка для обновления store
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        if (!isMounted) return;
+        
+        const currentProfiles = useProfileStore.getState().profiles;
+        const profile = currentProfiles.find(p => p.id === profileId);
         
         if (!profile) {
           setError('Профиль не найден');
@@ -71,20 +80,34 @@ export default function BrowserPage() {
           serverNodeIp: profile.serverNodeIp 
         });
         
-        setVncUrl(vncUrl);
-        setLoading(false);
+        if (isMounted) {
+          setVncUrl(vncUrl);
+          setLoading(false);
+        }
       } catch (err) {
         console.error('Ошибка загрузки профиля:', err);
-        setError('Не удалось загрузить профиль');
-        setLoading(false);
+        if (isMounted) {
+          setError('Не удалось загрузить профиль');
+          setLoading(false);
+        }
       }
     };
 
     loadProfile();
-  }, [profileId, isAuthenticated, fetchProfiles, profiles]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [profileId, isAuthenticated, fetchProfiles]); // Убрали profiles из зависимостей
 
   useEffect(() => {
     if (!vncUrl || !vncContainerRef.current) return;
+    
+    // Проверяем, не создан ли уже iframe
+    if (vncContainerRef.current.children.length > 0) {
+      console.log('🖼️ iframe already exists, skipping creation');
+      return;
+    }
 
     console.log('🖼️ Creating iframe with URL:', vncUrl);
 
@@ -95,36 +118,55 @@ export default function BrowserPage() {
     iframe.style.height = '100%';
     iframe.style.border = 'none';
     iframe.setAttribute('allow', 'fullscreen');
-    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    // Убираем sandbox, так как он может блокировать WebSocket соединения noVNC
+    // iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    
+    let loadTimeout: NodeJS.Timeout;
+    let errorTimeout: NodeJS.Timeout;
     
     iframe.onload = () => {
       console.log('✅ iframe loaded successfully');
+      clearTimeout(loadTimeout);
+      clearTimeout(errorTimeout);
     };
     
     iframe.onerror = (error) => {
       console.error('❌ iframe error:', error);
-      setError('Не удалось загрузить браузер. Проверьте, что профиль запущен и порт доступен.');
+      clearTimeout(loadTimeout);
+      clearTimeout(errorTimeout);
+      // Не устанавливаем ошибку сразу, даем время на загрузку WebSocket
     };
     
-    // Таймаут для проверки загрузки
-    const timeout = setTimeout(() => {
-      if (iframe.contentDocument?.readyState !== 'complete') {
-        console.warn('⚠️ iframe loading timeout');
-      }
-    }, 10000);
+    // Таймаут для проверки загрузки (увеличиваем до 30 секунд для WebSocket)
+    loadTimeout = setTimeout(() => {
+      console.warn('⚠️ iframe loading timeout - проверяем доступность порта');
+      // Проверяем доступность порта
+      fetch(vncUrl, { method: 'HEAD', mode: 'no-cors' })
+        .catch(() => {
+          console.error('❌ Порт недоступен');
+          setError('Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
+        });
+    }, 30000);
+    
+    // Дополнительный таймаут для предупреждения
+    errorTimeout = setTimeout(() => {
+      console.warn('⚠️ iframe still loading after 15 seconds - это нормально для WebSocket соединений');
+    }, 15000);
     
     vncContainerRef.current.innerHTML = '';
     vncContainerRef.current.appendChild(iframe);
 
     return () => {
-      clearTimeout(timeout);
-      if (vncContainerRef.current) {
-        vncContainerRef.current.innerHTML = '';
-      }
+      clearTimeout(loadTimeout);
+      clearTimeout(errorTimeout);
+      // Не очищаем iframe при размонтировании, чтобы не прерывать соединение
     };
   }, [vncUrl]);
 
-  const profile = profiles.find(p => p.id === profileId);
+  // Используем useMemo для предотвращения лишних пересчетов
+  const profile = useMemo(() => {
+    return profiles.find(p => p.id === profileId);
+  }, [profiles, profileId]);
 
   if (loading) {
     return (

@@ -64,6 +64,49 @@ public class DockerService
             // Проверяем и создаем сеть, если её нет
             await EnsureNetworkExistsAsync(networkName);
 
+            // Проверяем и удаляем существующий контейнер с таким именем
+            try
+            {
+                var existingContainers = await _dockerClient.Containers.ListContainersAsync(
+                    new ContainersListParameters { All = true });
+                // Проверяем по точному имени (Docker добавляет "/" в начало имени)
+                var existingContainer = existingContainers.FirstOrDefault(c => 
+                    c.Names != null && c.Names.Any(n => n == $"/{containerName}" || n == containerName));
+
+                if (existingContainer != null)
+                {
+                    _logger.LogWarning("⚠️ Container {ContainerName} already exists (ID: {ContainerId}). Removing it...", 
+                        containerName, existingContainer.ID);
+                    
+                    try
+                    {
+                        // Останавливаем контейнер, если он запущен
+                        if (existingContainer.State == "running")
+                        {
+                            await _dockerClient.Containers.StopContainerAsync(
+                                existingContainer.ID, 
+                                new ContainerStopParameters());
+                            _logger.LogInformation("🛑 Stopped existing container {ContainerId}", existingContainer.ID);
+                        }
+                        
+                        // Удаляем контейнер
+                        await _dockerClient.Containers.RemoveContainerAsync(
+                            existingContainer.ID, 
+                            new ContainerRemoveParameters { Force = true });
+                        _logger.LogInformation("🗑️ Removed existing container {ContainerId}", existingContainer.ID);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "❌ Failed to remove existing container {ContainerId}", existingContainer.ID);
+                        throw new InvalidOperationException($"Failed to remove existing container: {ex.Message}", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "⚠️ Error checking for existing containers, continuing...");
+            }
+
             // Проверяем наличие образа
             bool imageExists = false;
             try

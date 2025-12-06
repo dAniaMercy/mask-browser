@@ -13,16 +13,19 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout, isAuthenticated, isAdmin } = useAuthStore();
+  const { user, logout, isAuthenticated, isAdmin, getIsAuthenticated } = useAuthStore();
   const router = useRouter();
   const { t } = useTranslation();
+
+  // Используем computed getter для проверки авторизации
+  const authenticated = isAuthenticated || getIsAuthenticated();
 
   const handleLogout = () => {
     logout();
     router.push('/');
   };
 
-  if (!isAuthenticated) {
+  if (!authenticated) {
     return <>{children}</>;
   }
 
@@ -41,7 +44,7 @@ export default function Layout({ children }: LayoutProps) {
               >
                 {t('common.dashboard')}
               </Link>
-              {isAdmin && (
+              {isAdmin && authenticated && (
                 <Link
                   href="/admin"
                   className="text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400"

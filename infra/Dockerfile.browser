@@ -49,9 +49,17 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     x11vnc \
     fluxbox \
+    novnc \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install websockify
+
+# Убеждаемся, что noVNC установлен правильно
+RUN if [ ! -d "/usr/share/novnc" ]; then \
+        echo "⚠️ noVNC not found in /usr/share/novnc, installing manually..."; \
+        mkdir -p /usr/share/novnc && \
+        wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1 -C /usr/share/novnc; \
+    fi
 
 # Create app directory
 WORKDIR /app

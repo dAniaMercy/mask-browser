@@ -109,14 +109,14 @@ public class LoadBalancerService
             {
                 try
                 {
-                    await _kafkaService.PublishProfileEventAsync("profile-events", new
-                    {
-                        EventType = "NodeRegistered",
-                        NodeIp = ipAddress,
-                        NodeName = name,
-                        MaxContainers = maxContainers,
-                        Timestamp = DateTime.UtcNow
-                    });
+            await _kafkaService.PublishProfileEventAsync("profile-events", new
+            {
+                EventType = "NodeRegistered",
+                NodeIp = ipAddress,
+                NodeName = name,
+                MaxContainers = maxContainers,
+                Timestamp = DateTime.UtcNow
+            });
                 }
                 catch (Exception ex)
                 {
@@ -127,12 +127,12 @@ public class LoadBalancerService
             // Publish to RabbitMQ for instant notification (неблокирующе)
             try
             {
-                _rabbitMQService.Publish("scaling.node.registered", new
-                {
-                    Ip = ipAddress,
-                    Name = name,
-                    Capacity = maxContainers
-                });
+            _rabbitMQService.Publish("scaling.node.registered", new
+            {
+                Ip = ipAddress,
+                Name = name,
+                Capacity = maxContainers
+            });
             }
             catch (Exception ex)
             {
@@ -153,12 +153,12 @@ public class LoadBalancerService
             {
                 try
                 {
-                    await _kafkaService.PublishProfileEventAsync("profile-events", new
-                    {
-                        EventType = "NodeUpdated",
-                        NodeIp = ipAddress,
-                        MaxContainers = maxContainers,
-                        Timestamp = DateTime.UtcNow
+            await _kafkaService.PublishProfileEventAsync("profile-events", new
+            {
+                EventType = "NodeUpdated",
+                NodeIp = ipAddress,
+                MaxContainers = maxContainers,
+                Timestamp = DateTime.UtcNow
                     });
                 }
                 catch (Exception ex)

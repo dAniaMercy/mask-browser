@@ -156,7 +156,7 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",
                 "https://109.172.101.73"
             )
-            .AllowAnyMethod()
+              .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials(); // ВАЖНО: для работы с credentials: 'include'
     });
@@ -207,7 +207,7 @@ app.MapMetrics();
 
 // Configure the HTTP request pipeline
 // Swagger доступен всегда для удобства разработки
-app.UseSwagger();
+    app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "MaskBrowser API v1");

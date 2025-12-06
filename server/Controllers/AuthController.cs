@@ -20,10 +20,10 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+{
+    try
     {
-        try
-        {
             _logger.LogInformation("Registration attempt: Email={Email}, Username={Username}", 
                 request?.Email ?? "null", request?.Username ?? "null");
 
@@ -63,36 +63,36 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Password must be at least 6 characters long" });
             }
 
-            var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
-            if (user == null)
-            {
+        var user = await _authService.RegisterAsync(request.Username, request.Email, request.Password);
+        if (user == null)
+        {
                 _logger.LogWarning("Registration failed: User already exists - Email={Email}, Username={Username}", 
                     request.Email, request.Username);
-                return BadRequest(new { message = "User already exists" });
-            }
+            return BadRequest(new { message = "User already exists" });
+        }
 
-            var token = _authService.GenerateJwtToken(user);
+        var token = _authService.GenerateJwtToken(user);
             _logger.LogInformation("User registered successfully: Id={UserId}, Username={Username}, Email={Email}", 
                 user.Id, user.Username, user.Email);
 
-            return Ok(new
-            {
-                token,
-                user = new
-                {
-                    user.Id,
-                    user.Username,
-                    user.Email
-                }
-            });
-        }
-        catch (Exception ex)
+        return Ok(new
         {
+            token,
+            user = new
+            {
+                user.Id,
+                user.Username,
+                user.Email
+            }
+        });
+    }
+    catch (Exception ex)
+    {
             _logger.LogError(ex, "Registration failed for Email={Email}, Username={Username}", 
                 request?.Email ?? "unknown", request?.Username ?? "unknown");
-            return StatusCode(500, new { message = "Server error during registration", error = ex.Message });
-        }
+        return StatusCode(500, new { message = "Server error during registration", error = ex.Message });
     }
+}
 
 
     [HttpPost("login")]

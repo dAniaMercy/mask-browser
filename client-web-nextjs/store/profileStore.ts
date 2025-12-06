@@ -48,10 +48,16 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       console.log('📥 Загрузка профилей...');
       const response = await apiClient.get('/api/profile');
       console.log('✅ Профили загружены:', response.data);
-      set({ profiles: response.data, loading: false });
+      console.log('📊 Количество профилей:', response.data?.length || 0);
+      console.log('📋 Тип данных:', Array.isArray(response.data) ? 'Array' : typeof response.data);
+      
+      // Убеждаемся, что данные - это массив
+      const profilesData = Array.isArray(response.data) ? response.data : [];
+      console.log('✅ Установка профилей в store:', profilesData);
+      set({ profiles: profilesData, loading: false });
     } catch (error: any) {
       console.error('❌ Ошибка загрузки:', error.response?.data || error.message);
-      set({ error: error.message, loading: false });
+      set({ error: error.message, loading: false, profiles: [] });
     }
   },
 

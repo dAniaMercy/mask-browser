@@ -22,19 +22,29 @@ export default function DashboardPage() {
       return;
     }
     fetchProfiles();
+  }, [isAuthenticated, fetchProfiles, router]);
+
+  // Отдельный эффект для автоматического обновления статусов
+  useEffect(() => {
+    if (!isAuthenticated || profiles.length === 0) {
+      return;
+    }
+    
+    const hasStartingOrStopping = profiles.some(
+      (p) => p.status === 'Starting' || p.status === 'Stopping'
+    );
+    
+    if (!hasStartingOrStopping) {
+      return;
+    }
     
     // Автоматическое обновление статусов профилей каждые 3 секунды
     const interval = setInterval(() => {
-      const hasStartingOrStopping = profiles.some(
-        (p) => p.status === 'Starting' || p.status === 'Stopping'
-      );
-      if (hasStartingOrStopping) {
-        fetchProfiles();
-      }
+      fetchProfiles();
     }, 3000);
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, fetchProfiles, router, profiles]);
+  }, [isAuthenticated, profiles, fetchProfiles]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -54,6 +64,14 @@ export default function DashboardPage() {
   if (!isAuthenticated) {
     return null;
   }
+
+  // Отладочный вывод
+  console.log('🎯 Dashboard render:', {
+    loading,
+    profilesCount: profiles?.length || 0,
+    profiles,
+    error,
+  });
 
   return (
     <motion.div
@@ -78,13 +96,15 @@ export default function DashboardPage() {
 
       {loading ? (
         <div className="text-center py-8">Загрузка...</div>
-      ) : profiles.length === 0 ? (
+      ) : !profiles || profiles.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           {t('profile.noProfiles') || 'Нет профилей. Создайте первый профиль.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {profiles.map((profile) => (
+          {profiles.map((profile) => {
+            console.log('🎨 Рендеринг профиля:', profile);
+            return (
             <motion.div
               key={profile.id}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -169,7 +189,8 @@ export default function DashboardPage() {
                 </button>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       )}
     </motion.div>

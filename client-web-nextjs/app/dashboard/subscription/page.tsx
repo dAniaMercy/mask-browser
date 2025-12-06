@@ -135,7 +135,7 @@ export default function SubscriptionPage() {
     );
   }
 
-  const currentTier = subscriptionTiers.find(t => t.id === subscription?.tierValue ?? 0) || subscriptionTiers[0];
+  const currentTier = subscriptionTiers.find(t => t.id === (subscription?.tierValue ?? 0)) ?? subscriptionTiers[0];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-black p-4">

@@ -151,35 +151,40 @@ export default function BrowserPage() {
       }
     };
     
-    // Проверяем доступность порта перед созданием iframe
-    const checkPort = async () => {
+    // Проверяем доступность прокси endpoint перед созданием iframe
+    const checkProxy = async () => {
       if (!isMountedRef.current) return;
       try {
+        // Используем GET вместо HEAD для лучшей совместимости
         const response = await fetch(vncUrl, { 
-          method: 'HEAD', 
-          mode: 'no-cors',
+          method: 'GET',
+          credentials: 'include',
           cache: 'no-cache'
         });
-        console.log('✅ Port is accessible');
+        if (response.ok) {
+          console.log('✅ Proxy endpoint is accessible');
+        } else {
+          console.warn('⚠️ Proxy endpoint returned:', response.status);
+        }
       } catch (err) {
-        console.warn('⚠️ Port check failed (this is normal for CORS):', err);
-        // Это нормально для CORS, продолжаем
+        console.warn('⚠️ Proxy check failed:', err);
+        // Это может быть нормально, продолжаем
       }
     };
     
-    // Проверяем порт через небольшую задержку
-    checkTimeout = setTimeout(checkPort, 1000);
+    // Проверяем прокси через небольшую задержку
+    checkTimeout = setTimeout(checkProxy, 1000);
     
     // Таймаут для проверки загрузки (увеличиваем до 30 секунд для WebSocket)
     loadTimeout = setTimeout(() => {
       if (isMountedRef.current) {
-        console.warn('⚠️ iframe loading timeout - проверяем доступность порта');
-        // Проверяем доступность порта
-        fetch(vncUrl, { method: 'HEAD', mode: 'no-cors' })
+        console.warn('⚠️ iframe loading timeout - проверяем доступность прокси');
+        // Проверяем доступность прокси
+        fetch(vncUrl, { method: 'GET', credentials: 'include' })
           .catch(() => {
             if (isMountedRef.current) {
-              console.error('❌ Порт недоступен');
-              safeSetState(setError, 'Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
+              console.error('❌ Прокси недоступен');
+              safeSetState(setError, 'Не удалось подключиться к браузеру через прокси. Проверьте, что профиль запущен.');
             }
           });
       }

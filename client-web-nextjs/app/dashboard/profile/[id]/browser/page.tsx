@@ -38,6 +38,7 @@ export default function BrowserPage() {
 
     const loadProfile = async () => {
       try {
+        if (!isMounted) return;
         setLoading(true);
         await fetchProfiles();
         
@@ -50,27 +51,35 @@ export default function BrowserPage() {
         const profile = currentProfiles.find(p => p.id === profileId);
         
         if (!profile) {
-          setError('Профиль не найден');
-          setLoading(false);
+          if (isMounted) {
+            setError('Профиль не найден');
+            setLoading(false);
+          }
           return;
         }
 
         if (profile.status !== 'Running') {
-          setError('Профиль не запущен. Запустите профиль перед просмотром браузера.');
-          setLoading(false);
+          if (isMounted) {
+            setError('Профиль не запущен. Запустите профиль перед просмотром браузера.');
+            setLoading(false);
+          }
           return;
         }
 
         if (!profile.port || !profile.serverNodeIp) {
-          setError('Порт или IP сервера не указаны');
-          setLoading(false);
+          if (isMounted) {
+            setError('Порт или IP сервера не указаны');
+            setLoading(false);
+          }
           return;
         }
 
         // Формируем URL для noVNC
         // websockify работает на порту 6080 и предоставляет WebSocket endpoint
         // noVNC клиент должен подключаться через WebSocket
-        const vncUrl = `http://${profile.serverNodeIp}:${profile.port}/vnc.html?autoconnect=true&resize=scale&password=`;
+        // x11vnc запущен с -nopw, поэтому пароль не требуется
+        // Убираем параметр password, так как VNC сервер не требует пароль
+        const vncUrl = `http://${profile.serverNodeIp}:${profile.port}/vnc.html?autoconnect=true&resize=scale`;
         
         console.log('🌐 VNC URL:', vncUrl);
         console.log('📊 Profile data:', { 
@@ -98,7 +107,7 @@ export default function BrowserPage() {
     return () => {
       isMounted = false;
     };
-  }, [profileId, isAuthenticated, fetchProfiles]); // Убрали profiles из зависимостей
+  }, [profileId, isAuthenticated]); // Убрали fetchProfiles из зависимостей, чтобы избежать бесконечных циклов
 
   useEffect(() => {
     if (!vncUrl || !vncContainerRef.current) return;
@@ -110,6 +119,9 @@ export default function BrowserPage() {
     }
 
     console.log('🖼️ Creating iframe with URL:', vncUrl);
+
+    // Флаг для предотвращения обновления состояния после размонтирования
+    let isMounted = true;
 
     // Создаем iframe для noVNC
     const iframe = document.createElement('iframe');
@@ -123,42 +135,75 @@ export default function BrowserPage() {
     
     let loadTimeout: NodeJS.Timeout;
     let errorTimeout: NodeJS.Timeout;
+    let checkTimeout: NodeJS.Timeout;
     
     iframe.onload = () => {
       console.log('✅ iframe loaded successfully');
-      clearTimeout(loadTimeout);
-      clearTimeout(errorTimeout);
+      if (isMounted) {
+        clearTimeout(loadTimeout);
+        clearTimeout(errorTimeout);
+        clearTimeout(checkTimeout);
+      }
     };
     
     iframe.onerror = (error) => {
       console.error('❌ iframe error:', error);
-      clearTimeout(loadTimeout);
-      clearTimeout(errorTimeout);
-      // Не устанавливаем ошибку сразу, даем время на загрузку WebSocket
+      if (isMounted) {
+        clearTimeout(loadTimeout);
+        clearTimeout(errorTimeout);
+        clearTimeout(checkTimeout);
+        // Не устанавливаем ошибку сразу, даем время на загрузку WebSocket
+      }
     };
+    
+    // Проверяем доступность порта перед созданием iframe
+    const checkPort = async () => {
+      try {
+        const response = await fetch(vncUrl, { 
+          method: 'HEAD', 
+          mode: 'no-cors',
+          cache: 'no-cache'
+        });
+        console.log('✅ Port is accessible');
+      } catch (err) {
+        console.warn('⚠️ Port check failed (this is normal for CORS):', err);
+        // Это нормально для CORS, продолжаем
+      }
+    };
+    
+    // Проверяем порт через небольшую задержку
+    checkTimeout = setTimeout(checkPort, 1000);
     
     // Таймаут для проверки загрузки (увеличиваем до 30 секунд для WebSocket)
     loadTimeout = setTimeout(() => {
-      console.warn('⚠️ iframe loading timeout - проверяем доступность порта');
-      // Проверяем доступность порта
-      fetch(vncUrl, { method: 'HEAD', mode: 'no-cors' })
-        .catch(() => {
-          console.error('❌ Порт недоступен');
-          setError('Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
-        });
+      if (isMounted) {
+        console.warn('⚠️ iframe loading timeout - проверяем доступность порта');
+        // Проверяем доступность порта
+        fetch(vncUrl, { method: 'HEAD', mode: 'no-cors' })
+          .catch(() => {
+            if (isMounted) {
+              console.error('❌ Порт недоступен');
+              setError('Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
+            }
+          });
+      }
     }, 30000);
     
     // Дополнительный таймаут для предупреждения
     errorTimeout = setTimeout(() => {
-      console.warn('⚠️ iframe still loading after 15 seconds - это нормально для WebSocket соединений');
+      if (isMounted) {
+        console.warn('⚠️ iframe still loading after 15 seconds - это нормально для WebSocket соединений');
+      }
     }, 15000);
     
     vncContainerRef.current.innerHTML = '';
     vncContainerRef.current.appendChild(iframe);
 
     return () => {
+      isMounted = false;
       clearTimeout(loadTimeout);
       clearTimeout(errorTimeout);
+      clearTimeout(checkTimeout);
       // Не очищаем iframe при размонтировании, чтобы не прерывать соединение
     };
   }, [vncUrl]);

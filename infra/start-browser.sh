@@ -77,6 +77,24 @@ if ! pgrep -f websockify > /dev/null; then
     cat /tmp/websockify.log 2>/dev/null || echo "No log file"
     exit 1
 fi
+
+# Проверяем, что websockify слушает на порту 6080
+echo "🔍 Checking if websockify is listening on port 6080..."
+for i in {1..10}; do
+    if netstat -tlnp 2>/dev/null | grep -q ":6080" || ss -tlnp 2>/dev/null | grep -q ":6080"; then
+        echo "✅ websockify is listening on port 6080"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo "⚠️ WARNING: websockify may not be listening on port 6080"
+        echo "📋 websockify log:"
+        cat /tmp/websockify.log 2>/dev/null || echo "No log file"
+    else
+        echo "⏳ Waiting for websockify to start listening (attempt $i/10)..."
+        sleep 1
+    fi
+done
+
 echo "✅ websockify is running on port 6080 (PID: $WEBSOCKIFY_PID)"
 
 # Проверяем доступность портов

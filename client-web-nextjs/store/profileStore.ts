@@ -122,7 +122,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
       // Продолжаем обновлять статус каждые 2 секунды, пока профиль не запустится
       const checkStatus = async () => {
         try {
-          await get().fetchProfiles();
+      await get().fetchProfiles();
           const profile = get().profiles.find((p) => p.id === id);
           if (profile) {
             if (profile.status === 'Starting') {

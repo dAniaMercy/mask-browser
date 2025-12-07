@@ -37,6 +37,15 @@ RUN chmod +x /opt/bin/start-websockify.sh
 # Копируем конфигурацию supervisor для websockify
 COPY websockify.conf /etc/supervisor/conf.d/websockify.conf
 
+# Убеждаемся, что права доступа правильные
+RUN chmod 644 /etc/supervisor/conf.d/websockify.conf && \
+    chown root:root /etc/supervisor/conf.d/websockify.conf
+
+# Создаем директорию для логов websockify
+RUN mkdir -p /var/log && \
+    touch /var/log/websockify.err.log /var/log/websockify.out.log && \
+    chmod 666 /var/log/websockify.err.log /var/log/websockify.out.log
+
 # Возвращаемся к пользователю seluser (для безопасности)
 USER seluser
 
@@ -45,4 +54,5 @@ EXPOSE 5900 6080
 
 # Selenium образ использует supervisor, он запустит VNC и websockify автоматически
 # Не переопределяем ENTRYPOINT, чтобы supervisor работал
+# Supervisor автоматически загрузит конфигурацию из /etc/supervisor/conf.d/
 

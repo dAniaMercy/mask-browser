@@ -4,6 +4,9 @@
 
 set -e
 
+# Убеждаемся, что мы можем выполнять команды
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 echo "🚀 Starting websockify for noVNC..."
 
 NOVNC_DIR="/usr/share/novnc"

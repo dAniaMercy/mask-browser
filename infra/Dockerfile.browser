@@ -30,9 +30,19 @@ RUN mkdir -p /usr/share/novnc && \
 # Устанавливаем websockify
 RUN pip3 install --no-cache-dir websockify
 
+# Создаем директорию /opt/bin если её нет
+RUN mkdir -p /opt/bin && \
+    chmod 755 /opt/bin
+
 # Копируем скрипт запуска websockify
-COPY start-websockify.sh /opt/bin/
-RUN chmod +x /opt/bin/start-websockify.sh
+COPY start-websockify.sh /opt/bin/start-websockify.sh
+
+# Устанавливаем правильные права доступа для скрипта
+# Важно: seluser должен иметь права на выполнение
+RUN chmod 755 /opt/bin/start-websockify.sh && \
+    chown root:root /opt/bin/start-websockify.sh && \
+    # Проверяем, что скрипт действительно исполняемый
+    ls -la /opt/bin/start-websockify.sh
 
 # Копируем конфигурацию supervisor для websockify
 COPY websockify.conf /etc/supervisor/conf.d/websockify.conf
@@ -41,10 +51,12 @@ COPY websockify.conf /etc/supervisor/conf.d/websockify.conf
 RUN chmod 644 /etc/supervisor/conf.d/websockify.conf && \
     chown root:root /etc/supervisor/conf.d/websockify.conf
 
-# Создаем директорию для логов websockify
+# Создаем директорию для логов websockify с правильными правами
 RUN mkdir -p /var/log && \
     touch /var/log/websockify.err.log /var/log/websockify.out.log && \
-    chmod 666 /var/log/websockify.err.log /var/log/websockify.out.log
+    chmod 666 /var/log/websockify.err.log /var/log/websockify.out.log && \
+    # Убеждаемся, что seluser может писать в /var/log
+    chmod 777 /var/log
 
 # Возвращаемся к пользователю seluser (для безопасности)
 USER seluser

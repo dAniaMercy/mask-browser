@@ -1,0 +1,39 @@
+# Самое простое решение - используем готовый образ с VNC
+FROM selenium/standalone-chrome:latest
+
+# Этот образ уже содержит:
+# - Chrome/Chromium
+# - Xvfb
+# - VNC сервер (на порту 5900)
+# - Все необходимые зависимости
+
+# Нам нужно только добавить noVNC и websockify
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаем noVNC
+RUN mkdir -p /usr/share/novnc && \
+    cd /usr/share/novnc && \
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | \
+    tar -xz --strip-components=1
+
+# Устанавливаем websockify
+RUN pip3 install --no-cache-dir websockify
+
+# Простой скрипт запуска websockify
+COPY start-websockify.sh /opt/bin/
+RUN chmod +x /opt/bin/start-websockify.sh
+
+# Возвращаемся к seluser
+USER seluser
+
+EXPOSE 5900 6080
+
+# Selenium образ уже запускает VNC, нам нужно только websockify
+ENTRYPOINT ["/opt/bin/start-websockify.sh"]
+

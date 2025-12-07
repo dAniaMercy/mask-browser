@@ -1,0 +1,35 @@
+# Оптимизированная версия с использованием готовых решений
+FROM selenium/standalone-chrome:latest
+
+# Или альтернатива - более легковесный вариант:
+# FROM browserless/chrome:latest
+
+# Устанавливаем noVNC (если не установлен)
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаем noVNC в стандартное место
+RUN mkdir -p /usr/share/novnc && \
+    cd /usr/share/novnc && \
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | \
+    tar -xz --strip-components=1 && \
+    echo "✅ noVNC installed"
+
+# Устанавливаем websockify
+RUN pip3 install --no-cache-dir websockify
+
+# Копируем упрощенный скрипт запуска
+COPY start-browser-optimized.sh /opt/bin/
+RUN chmod +x /opt/bin/start-browser-optimized.sh
+
+# Возвращаемся к пользователю seluser (для selenium образа)
+USER seluser
+
+WORKDIR /app
+
+EXPOSE 5900 6080
+
+ENTRYPOINT ["/opt/bin/start-browser-optimized.sh"]
+

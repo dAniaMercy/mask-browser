@@ -1,24 +1,24 @@
 'use client';
 
+// Упрощенная версия без React ошибок
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import Layout from '@/components/Layout';
 import { Plus, Play, Square, Trash2, Monitor } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const { profiles, loading, error, fetchProfiles, createProfile, startProfile, stopProfile, deleteProfile } =
-    useProfileStore();
+  const { isAuthenticated } = useAuthStore();
+  const { profiles, loading, error, startProfile, stopProfile, deleteProfile } = useProfileStore();
   const { t } = useTranslation();
   const isMountedRef = useRef(true);
+  const fetchIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Восстановление авторизации
   useEffect(() => {
-    // Восстанавливаем авторизацию из localStorage
     const { hydrate } = useAuthStore.getState();
     hydrate();
     
@@ -27,18 +27,29 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Загрузка профилей при монтировании и изменении авторизации
+  // Редирект на логин
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, router]);
+
+  // Загрузка профилей при монтировании
   useEffect(() => {
     if (!isAuthenticated || !isMountedRef.current) return;
     
-    // Используем getState() для получения функции без зависимости
+    // Загружаем профили сразу
     const { fetchProfiles } = useProfileStore.getState();
     fetchProfiles();
   }, [isAuthenticated]);
 
-  // Автоматическое обновление статусов профилей
+  // Автоматическое обновление статусов
   useEffect(() => {
-    if (!isAuthenticated || profiles.length === 0 || !isMountedRef.current) {
+    if (!isAuthenticated || profiles.length === 0) {
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current);
+        fetchIntervalRef.current = null;
+      }
       return;
     }
     
@@ -47,18 +58,29 @@ export default function DashboardPage() {
     );
     
     if (!hasStartingOrStopping) {
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current);
+        fetchIntervalRef.current = null;
+      }
       return;
     }
     
-    // Автоматическое обновление статусов профилей каждые 3 секунды
-    const interval = setInterval(() => {
-      if (isMountedRef.current) {
-        const { fetchProfiles } = useProfileStore.getState();
-        fetchProfiles();
-      }
-    }, 3000);
+    // Автоматическое обновление каждые 3 секунды
+    if (!fetchIntervalRef.current) {
+      fetchIntervalRef.current = setInterval(() => {
+        if (isMountedRef.current) {
+          const { fetchProfiles } = useProfileStore.getState();
+          fetchProfiles();
+        }
+      }, 3000);
+    }
     
-    return () => clearInterval(interval);
+    return () => {
+      if (fetchIntervalRef.current) {
+        clearInterval(fetchIntervalRef.current);
+        fetchIntervalRef.current = null;
+      }
+    };
   }, [isAuthenticated, profiles]);
 
   const getStatusColor = (status: string) => {
@@ -79,14 +101,6 @@ export default function DashboardPage() {
   if (!isAuthenticated) {
     return null;
   }
-
-  // Отладочный вывод
-  console.log('🎯 Dashboard render:', {
-    loading,
-    profilesCount: profiles?.length || 0,
-    profiles,
-    error,
-  });
 
   return (
     <motion.div
@@ -117,9 +131,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {profiles.map((profile) => {
-            console.log('🎨 Рендеринг профиля:', profile);
-            return (
+          {profiles.map((profile) => (
             <motion.div
               key={profile.id}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -214,10 +226,10 @@ export default function DashboardPage() {
                 </button>
               </div>
             </motion.div>
-            );
-          })}
+          ))}
         </div>
       )}
     </motion.div>
   );
 }
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/authStore';
@@ -15,11 +15,16 @@ export default function DashboardPage() {
   const { profiles, loading, error, fetchProfiles, createProfile, startProfile, stopProfile, deleteProfile } =
     useProfileStore();
   const { t } = useTranslation();
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
     // Восстанавливаем авторизацию из localStorage
     const { hydrate } = useAuthStore.getState();
     hydrate();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -27,12 +32,14 @@ export default function DashboardPage() {
       router.push('/login');
       return;
     }
-    fetchProfiles();
-  }, [isAuthenticated, fetchProfiles, router]);
+    if (isMountedRef.current) {
+      fetchProfiles();
+    }
+  }, [isAuthenticated, router]); // Убрали fetchProfiles из зависимостей
 
   // Отдельный эффект для автоматического обновления статусов
   useEffect(() => {
-    if (!isAuthenticated || profiles.length === 0) {
+    if (!isAuthenticated || profiles.length === 0 || !isMountedRef.current) {
       return;
     }
     
@@ -46,11 +53,13 @@ export default function DashboardPage() {
     
     // Автоматическое обновление статусов профилей каждые 3 секунды
     const interval = setInterval(() => {
-      fetchProfiles();
+      if (isMountedRef.current) {
+        fetchProfiles();
+      }
     }, 3000);
     
     return () => clearInterval(interval);
-  }, [isAuthenticated, profiles, fetchProfiles]);
+  }, [isAuthenticated, profiles]); // Убрали fetchProfiles из зависимостей
 
   const getStatusColor = (status: string) => {
     switch (status) {

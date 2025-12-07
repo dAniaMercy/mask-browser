@@ -18,8 +18,9 @@ fluxbox &
 sleep 1
 
 # Start VNC server (слушаем на всех интерфейсах внутри контейнера)
+# Используем -rfbport для явного указания порта и IPv4
 echo "🖥️ Starting VNC server on 0.0.0.0:5900..."
-x11vnc -display :99 -nopw -listen 0.0.0.0 -xkb -forever -shared &
+x11vnc -display :99 -nopw -listen 0.0.0.0 -rfbport 5900 -xkb -forever -shared -bg -o /tmp/x11vnc.log
 sleep 3
 
 # Проверяем, что VNC сервер запустился
@@ -33,38 +34,36 @@ echo "✅ VNC server is running"
 # websockify слушает на всех интерфейсах (0.0.0.0) для доступа извне контейнера
 echo "🌐 Starting websockify on 0.0.0.0:6080..."
 
-# Проверяем наличие noVNC
-if [ -d "/usr/share/novnc" ]; then
+# Проверяем наличие noVNC и создаем директорию, если нужно
+echo "🔍 Checking for noVNC..."
+if [ ! -d "/usr/share/novnc" ]; then
+    echo "⚠️ noVNC not found at /usr/share/novnc, creating directory and downloading..."
+    mkdir -p /usr/share/novnc
+    cd /usr/share/novnc
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1
+    echo "✅ noVNC downloaded to /usr/share/novnc"
+fi
+
+# Проверяем, что vnc.html существует
+if [ ! -f "/usr/share/novnc/vnc.html" ]; then
+    echo "⚠️ vnc.html not found, trying to download noVNC again..."
+    cd /usr/share/novnc
+    rm -rf *
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1
+fi
+
+if [ -d "/usr/share/novnc" ] && [ -f "/usr/share/novnc/vnc.html" ]; then
     echo "✅ noVNC found at /usr/share/novnc"
     # Запускаем websockify с веб-интерфейсом noVNC
-    # Используем --target-config для правильной работы
+    cd /usr/share/novnc
     websockify --web=/usr/share/novnc --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
     WEBSOCKIFY_PID=$!
-elif [ -d "/usr/share/novnc/vnc.html" ] || [ -f "/usr/share/novnc/vnc.html" ]; then
-    echo "✅ noVNC vnc.html found"
-    websockify --web=/usr/share/novnc --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
-    WEBSOCKIFY_PID=$!
+    echo "✅ websockify started with PID: $WEBSOCKIFY_PID"
 else
-    echo "⚠️ noVNC not found, trying to install or use alternative"
-    # Пытаемся найти noVNC в других местах
-    NOVNC_PATH=""
-    for path in "/usr/share/novnc" "/opt/novnc" "/usr/local/share/novnc"; do
-        if [ -d "$path" ]; then
-            NOVNC_PATH="$path"
-            break
-        fi
-    done
-    
-    if [ -n "$NOVNC_PATH" ]; then
-        echo "✅ Found noVNC at $NOVNC_PATH"
-        websockify --web="$NOVNC_PATH" --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
-        WEBSOCKIFY_PID=$!
-    else
-        echo "⚠️ noVNC not found, starting websockify without web interface"
-        # Запускаем websockify без веб-интерфейса (только WebSocket)
-        websockify --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
-        WEBSOCKIFY_PID=$!
-    fi
+    echo "❌ ERROR: Failed to setup noVNC"
+    echo "📋 Trying to start websockify without web interface..."
+    websockify --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
+    WEBSOCKIFY_PID=$!
 fi
 
 # Даем время на запуск

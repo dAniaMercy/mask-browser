@@ -55,11 +55,16 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install websockify
 
 # Убеждаемся, что noVNC установлен правильно
-RUN if [ ! -d "/usr/share/novnc" ]; then \
-        echo "⚠️ noVNC not found in /usr/share/novnc, installing manually..."; \
-        mkdir -p /usr/share/novnc && \
-        wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1 -C /usr/share/novnc; \
-    fi
+RUN mkdir -p /usr/share/novnc && \
+    if [ ! -f "/usr/share/novnc/vnc.html" ]; then \
+        echo "⚠️ noVNC not found, downloading..."; \
+        cd /usr/share/novnc && \
+        wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1 && \
+        echo "✅ noVNC downloaded successfully"; \
+    else \
+        echo "✅ noVNC already exists"; \
+    fi && \
+    ls -la /usr/share/novnc/ | head -10
 
 # Create app directory
 WORKDIR /app

@@ -428,21 +428,43 @@ public class ProfileService
             profile.Status = ProfileStatus.Stopped;
             var containerId = profile.ContainerId;
             profile.ContainerId = string.Empty;
+            profile.ServerNodeIp = string.Empty;
+            profile.Port = 0;
             await _context.SaveChangesAsync();
 
-            // Publish events
-            _rabbitMQ.Publish("container.stopped", new { ProfileId = profileId });
-
-            await _kafkaService.PublishProfileEventAsync("profile-events", new
+            // Publish events (неблокирующие)
+            _ = Task.Run(() =>
             {
-                EventType = "ContainerStopped",
-                ProfileId = profileId,
-                ContainerId = containerId,
-                Timestamp = DateTime.UtcNow
+                try
+                {
+                    _rabbitMQ.Publish("container.stopped", new { ProfileId = profileId });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️ Failed to publish RabbitMQ event for stopped profile {ProfileId}", profileId);
+                }
             });
 
-            await _kafkaService.PublishContainerLogAsync(containerId, 
-                $"Container {containerId} stopped for profile {profileId}");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _kafkaService.PublishProfileEventAsync("profile-events", new
+                    {
+                        EventType = "ContainerStopped",
+                        ProfileId = profileId,
+                        ContainerId = containerId,
+                        Timestamp = DateTime.UtcNow
+                    });
+
+                    await _kafkaService.PublishContainerLogAsync(containerId, 
+                        $"Container {containerId} stopped for profile {profileId}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️ Failed to publish Kafka event for stopped profile {ProfileId}", profileId);
+                }
+            });
 
             _logger.LogInformation("✅ Profile {ProfileId} stopped successfully", profileId);
             return true;
@@ -467,8 +489,21 @@ public class ProfileService
             }
             
             // Устанавливаем статус Stopped вместо Error, чтобы можно было попробовать снова
-            profile.Status = ProfileStatus.Stopped;
-            await _context.SaveChangesAsync();
+            try
+            {
+                profile.Status = ProfileStatus.Stopped;
+                profile.ServerNodeIp = string.Empty;
+                profile.Port = 0;
+                if (string.IsNullOrEmpty(profile.ContainerId))
+                {
+                    profile.ContainerId = string.Empty;
+                }
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogError(saveEx, "❌ Failed to update profile status after stop error");
+            }
             return false;
         }
     }

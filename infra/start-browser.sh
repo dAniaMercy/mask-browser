@@ -36,21 +36,48 @@ echo "🌐 Starting websockify on 0.0.0.0:6080..."
 # Проверяем наличие noVNC
 if [ -d "/usr/share/novnc" ]; then
     echo "✅ noVNC found at /usr/share/novnc"
-    websockify --web=/usr/share/novnc --listen 0.0.0.0 6080 localhost:5900 &
+    # Запускаем websockify с веб-интерфейсом noVNC
+    # Используем --target-config для правильной работы
+    websockify --web=/usr/share/novnc --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
+    WEBSOCKIFY_PID=$!
+elif [ -d "/usr/share/novnc/vnc.html" ] || [ -f "/usr/share/novnc/vnc.html" ]; then
+    echo "✅ noVNC vnc.html found"
+    websockify --web=/usr/share/novnc --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
+    WEBSOCKIFY_PID=$!
 else
-    echo "⚠️ noVNC not found, starting websockify without web interface"
-    # Запускаем websockify без веб-интерфейса (только WebSocket)
-    websockify --listen 0.0.0.0 6080 localhost:5900 &
+    echo "⚠️ noVNC not found, trying to install or use alternative"
+    # Пытаемся найти noVNC в других местах
+    NOVNC_PATH=""
+    for path in "/usr/share/novnc" "/opt/novnc" "/usr/local/share/novnc"; do
+        if [ -d "$path" ]; then
+            NOVNC_PATH="$path"
+            break
+        fi
+    done
+    
+    if [ -n "$NOVNC_PATH" ]; then
+        echo "✅ Found noVNC at $NOVNC_PATH"
+        websockify --web="$NOVNC_PATH" --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
+        WEBSOCKIFY_PID=$!
+    else
+        echo "⚠️ noVNC not found, starting websockify without web interface"
+        # Запускаем websockify без веб-интерфейса (только WebSocket)
+        websockify --listen 0.0.0.0:6080 localhost:5900 > /tmp/websockify.log 2>&1 &
+        WEBSOCKIFY_PID=$!
+    fi
 fi
 
-sleep 3
+# Даем время на запуск
+sleep 5
 
 # Проверяем, что websockify запустился
 if ! pgrep -f websockify > /dev/null; then
     echo "❌ ERROR: websockify failed to start"
+    echo "📋 websockify log:"
+    cat /tmp/websockify.log 2>/dev/null || echo "No log file"
     exit 1
 fi
-echo "✅ websockify is running on port 6080"
+echo "✅ websockify is running on port 6080 (PID: $WEBSOCKIFY_PID)"
 
 # Проверяем доступность портов
 echo "🔍 Checking ports..."

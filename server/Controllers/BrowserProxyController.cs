@@ -1,0 +1,234 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MaskBrowser.Server.Infrastructure;
+using MaskBrowser.Server.Services;
+using System.Net.Http;
+using System.Net.WebSockets;
+using System.Text;
+
+namespace MaskBrowser.Server.Controllers;
+
+[ApiController]
+[Route("api/profile/{profileId}/browser")]
+[Authorize]
+public class BrowserProxyController : ControllerBase
+{
+    private readonly ApplicationDbContext _context;
+    private readonly DockerService _dockerService;
+    private readonly ILogger<BrowserProxyController> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public BrowserProxyController(
+        ApplicationDbContext context,
+        DockerService dockerService,
+        ILogger<BrowserProxyController> logger,
+        IHttpClientFactory httpClientFactory)
+    {
+        _context = context;
+        _dockerService = dockerService;
+        _logger = logger;
+        _httpClientFactory = httpClientFactory;
+    }
+
+    /// <summary>
+    /// Проксирование HTTP запросов к noVNC (статичные файлы)
+    /// Модифицирует HTML noVNC для использования прокси WebSocket
+    /// </summary>
+    [HttpGet("proxy")]
+    public async Task<IActionResult> ProxyHttp([FromRoute] int profileId, [FromQuery] string? path = "")
+    {
+        try
+        {
+            var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+            
+            var profile = await _context.BrowserProfiles
+                .FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);
+
+            if (profile == null)
+            {
+                return NotFound(new { message = "Profile not found" });
+            }
+
+            if (profile.Status != Models.ProfileStatus.Running)
+            {
+                return BadRequest(new { message = "Profile is not running" });
+            }
+
+            if (string.IsNullOrEmpty(profile.ContainerId) || profile.Port == 0)
+            {
+                return BadRequest(new { message = "Profile container not available" });
+            }
+
+            // Формируем URL для проксирования
+            var targetUrl = $"http://{profile.ServerNodeIp}:{profile.Port}";
+            if (!string.IsNullOrEmpty(path))
+            {
+                targetUrl += "/" + path.TrimStart('/');
+            }
+            else
+            {
+                targetUrl += "/vnc.html?autoconnect=true&resize=scale";
+            }
+
+            _logger.LogInformation("🔄 Proxying HTTP request to {Url} for profile {ProfileId}", targetUrl, profileId);
+
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+            var response = await httpClient.GetAsync(targetUrl);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("⚠️ Proxy request failed: {StatusCode} for {Url}", response.StatusCode, targetUrl);
+                return StatusCode((int)response.StatusCode, new { message = "Proxy request failed" });
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "text/html";
+
+            // Если это HTML файл (vnc.html), модифицируем его для использования прокси WebSocket
+            if (contentType.Contains("text/html") && content.Contains("noVNC"))
+            {
+                // Заменяем WebSocket URL на наш прокси endpoint
+                var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+                var wsProxyUrl = $"{apiBaseUrl}/api/profile/{profileId}/browser/ws";
+                
+                // Заменяем относительные WebSocket пути на наш прокси
+                content = content.Replace("'websockify'", $"'{wsProxyUrl}'");
+                content = content.Replace("\"websockify\"", $"\"{wsProxyUrl}\"");
+                content = content.Replace("path: 'websockify'", $"path: '{wsProxyUrl}'");
+                content = content.Replace("path: \"websockify\"", $"path: \"{wsProxyUrl}\"");
+                
+                // Также заменяем возможные абсолютные пути
+                content = content.Replace($"ws://{profile.ServerNodeIp}:{profile.Port}/websockify", wsProxyUrl);
+                content = content.Replace($"wss://{profile.ServerNodeIp}:{profile.Port}/websockify", wsProxyUrl.Replace("http://", "wss://").Replace("https://", "wss://"));
+                
+                _logger.LogInformation("✅ Modified noVNC HTML to use WebSocket proxy: {WsUrl}", wsProxyUrl);
+            }
+
+            return Content(content, contentType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error proxying HTTP request for profile {ProfileId}", profileId);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Проксирование WebSocket соединений к websockify
+    /// </summary>
+    [HttpGet("ws")]
+    public async Task ProxyWebSocket([FromRoute] int profileId)
+    {
+        if (!HttpContext.WebSockets.IsWebSocketRequest)
+        {
+            HttpContext.Response.StatusCode = 400;
+            return;
+        }
+
+        try
+        {
+            var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+            
+            var profile = await _context.BrowserProfiles
+                .FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);
+
+            if (profile == null)
+            {
+                HttpContext.Response.StatusCode = 404;
+                await HttpContext.Response.WriteAsync("Profile not found");
+                return;
+            }
+
+            if (profile.Status != Models.ProfileStatus.Running)
+            {
+                HttpContext.Response.StatusCode = 400;
+                await HttpContext.Response.WriteAsync("Profile is not running");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(profile.ContainerId) || profile.Port == 0)
+            {
+                HttpContext.Response.StatusCode = 400;
+                await HttpContext.Response.WriteAsync("Profile container not available");
+                return;
+            }
+
+            // Формируем WebSocket URL для websockify
+            // websockify слушает на порту 6080 и WebSocket endpoint обычно на корневом пути или /websockify
+            var wsUrl = $"ws://{profile.ServerNodeIp}:{profile.Port}";
+            
+            // Пробуем сначала корневой путь, если не сработает - попробуем /websockify
+            // websockify обычно слушает WebSocket на корневом пути
+            
+            _logger.LogInformation("🔄 Proxying WebSocket to {Url} for profile {ProfileId}", wsUrl, profileId);
+
+            // Принимаем WebSocket соединение от клиента
+            var clientWs = await HttpContext.WebSockets.AcceptWebSocketAsync();
+
+            // Создаем WebSocket клиент для подключения к websockify
+            using var serverWs = new ClientWebSocket();
+            await serverWs.ConnectAsync(new Uri(wsUrl), CancellationToken.None);
+
+            _logger.LogInformation("✅ WebSocket proxy established for profile {ProfileId}", profileId);
+
+            // Проксируем данные в обе стороны
+            var clientToServer = Task.Run(async () =>
+            {
+                try
+                {
+                    var buffer = new byte[4096];
+                    while (clientWs.State == WebSocketState.Open && serverWs.State == WebSocketState.Open)
+                    {
+                        var result = await clientWs.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            await serverWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client closed", CancellationToken.None);
+                            break;
+                        }
+                        await serverWs.SendAsync(new ArraySegment<byte>(buffer, 0, result.Count), result.MessageType, result.EndOfMessage, CancellationToken.None);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Error in client-to-server proxy for profile {ProfileId}", profileId);
+                }
+            });
+
+            var serverToClient = Task.Run(async () =>
+            {
+                try
+                {
+                    var buffer = new byte[4096];
+                    while (serverWs.State == WebSocketState.Open && clientWs.State == WebSocketState.Open)
+                    {
+                        var result = await serverWs.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            await clientWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server closed", CancellationToken.None);
+                            break;
+                        }
+                        await clientWs.SendAsync(new ArraySegment<byte>(buffer, 0, result.Count), result.MessageType, result.EndOfMessage, CancellationToken.None);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Error in server-to-client proxy for profile {ProfileId}", profileId);
+                }
+            });
+
+            await Task.WhenAny(clientToServer, serverToClient);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error establishing WebSocket proxy for profile {ProfileId}", profileId);
+            if (HttpContext.WebSockets.IsWebSocketRequest && HttpContext.WebSockets.WebSocketRequestedProtocols.Count > 0)
+            {
+                HttpContext.Response.StatusCode = 500;
+            }
+        }
+    }
+}
+

@@ -16,11 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Configuration
 var configuration = builder.Configuration;
 
-// Увеличиваем timeout для Kestrel (для долгих операций запуска профилей)
+// Увеличиваем timeout для Kestrel (для долгих операций запуска профилей и WebSocket)
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(10);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(10);
+    // Включаем WebSocket поддержку
+    options.AllowSynchronousIO = false;
 });
 
 // Add services

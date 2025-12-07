@@ -77,12 +77,10 @@ export default function BrowserPage() {
           return;
         }
 
-        // Формируем URL для noVNC
-        // websockify работает на порту 6080 и предоставляет WebSocket endpoint
-        // noVNC клиент должен подключаться через WebSocket
-        // x11vnc запущен с -nopw, поэтому пароль не требуется
-        // Убираем параметр password, так как VNC сервер не требует пароль
-        const vncUrl = `http://${profile.serverNodeIp}:${profile.port}/vnc.html?autoconnect=true&resize=scale`;
+        // Используем прокси через API для безопасности
+        // Вместо прямого подключения к порту контейнера, используем API endpoint
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://109.172.101.73:5050';
+        const vncUrl = `${apiUrl}/api/profile/${profile.id}/browser/proxy?path=vnc.html&autoconnect=true&resize=scale`;
         
         console.log('🌐 VNC URL:', vncUrl);
         console.log('📊 Profile data:', { 

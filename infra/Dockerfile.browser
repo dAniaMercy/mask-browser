@@ -55,16 +55,27 @@ RUN apt-get update && apt-get install -y \
 RUN pip3 install websockify
 
 # Убеждаемся, что noVNC установлен правильно
+# Сначала проверяем, установлен ли пакет novnc и где находятся файлы
 RUN mkdir -p /usr/share/novnc && \
-    if [ ! -f "/usr/share/novnc/vnc.html" ]; then \
-        echo "⚠️ noVNC not found, downloading..."; \
+    if [ -d "/usr/share/novnc" ] && [ -f "/usr/share/novnc/vnc.html" ]; then \
+        echo "✅ noVNC already exists from package"; \
+    elif [ -d "/usr/share/novnc" ] && [ -f "/usr/share/novnc/vnc_lite.html" ]; then \
+        echo "✅ noVNC vnc_lite.html found, creating symlink"; \
+        cd /usr/share/novnc && \
+        ln -sf vnc_lite.html vnc.html || true; \
+    else \
+        echo "⚠️ noVNC not found, downloading from GitHub..."; \
         cd /usr/share/novnc && \
         wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar -xz --strip-components=1 && \
         echo "✅ noVNC downloaded successfully"; \
-    else \
-        echo "✅ noVNC already exists"; \
     fi && \
-    ls -la /usr/share/novnc/ | head -10
+    echo "📋 noVNC files:" && \
+    ls -la /usr/share/novnc/ | head -10 && \
+    if [ -f "/usr/share/novnc/vnc.html" ]; then \
+        echo "✅ vnc.html exists"; \
+    else \
+        echo "❌ vnc.html NOT found"; \
+    fi
 
 # Create app directory
 WORKDIR /app

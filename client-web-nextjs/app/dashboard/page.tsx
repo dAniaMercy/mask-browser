@@ -33,7 +33,13 @@ export default function DashboardPage() {
       return;
     }
     if (isMountedRef.current) {
-      fetchProfiles();
+      // Используем setTimeout для асинхронного вызова, чтобы избежать обновления во время рендера
+      const timer = setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchProfiles();
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isAuthenticated, router]); // Убрали fetchProfiles из зависимостей
 
@@ -54,7 +60,9 @@ export default function DashboardPage() {
     // Автоматическое обновление статусов профилей каждые 3 секунды
     const interval = setInterval(() => {
       if (isMountedRef.current) {
-        fetchProfiles();
+        // Используем getState() для получения актуальной функции
+        const { fetchProfiles: fetch } = useProfileStore.getState();
+        fetch();
       }
     }, 3000);
     

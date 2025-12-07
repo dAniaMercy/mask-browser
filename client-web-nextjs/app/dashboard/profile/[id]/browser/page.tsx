@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { useProfileStore } from '@/store/profileStore';
@@ -16,11 +16,24 @@ export default function BrowserPage() {
   const [error, setError] = useState<string | null>(null);
   const [vncUrl, setVncUrl] = useState<string | null>(null);
   const vncContainerRef = useRef<HTMLDivElement>(null);
+  // Используем ref для отслеживания монтирования компонента
+  const isMountedRef = useRef(true);
+
+  // Безопасное обновление состояния только если компонент смонтирован
+  const safeSetState = useCallback(<T,>(setter: (value: T) => void, value: T) => {
+    if (isMountedRef.current) {
+      setter(value);
+    }
+  }, []);
 
   useEffect(() => {
     // Восстанавливаем авторизацию из localStorage
     const { hydrate } = useAuthStore.getState();
     hydrate();
+    
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -33,44 +46,34 @@ export default function BrowserPage() {
   useEffect(() => {
     if (!profileId || !isAuthenticated) return;
     
-    // Флаг для предотвращения множественных вызовов
-    let isMounted = true;
-
     const loadProfile = async () => {
       try {
-        if (!isMounted) return;
-        setLoading(true);
+        safeSetState(setLoading, true);
         await fetchProfiles();
         
         // Небольшая задержка для обновления store
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        if (!isMounted) return;
+        if (!isMountedRef.current) return;
         
         const currentProfiles = useProfileStore.getState().profiles;
         const profile = currentProfiles.find(p => p.id === profileId);
         
         if (!profile) {
-          if (isMounted) {
-            setError('Профиль не найден');
-            setLoading(false);
-          }
+          safeSetState(setError, 'Профиль не найден');
+          safeSetState(setLoading, false);
           return;
         }
 
         if (profile.status !== 'Running') {
-          if (isMounted) {
-            setError('Профиль не запущен. Запустите профиль перед просмотром браузера.');
-            setLoading(false);
-          }
+          safeSetState(setError, 'Профиль не запущен. Запустите профиль перед просмотром браузера.');
+          safeSetState(setLoading, false);
           return;
         }
 
         if (!profile.port || !profile.serverNodeIp) {
-          if (isMounted) {
-            setError('Порт или IP сервера не указаны');
-            setLoading(false);
-          }
+          safeSetState(setError, 'Порт или IP сервера не указаны');
+          safeSetState(setLoading, false);
           return;
         }
 
@@ -89,25 +92,19 @@ export default function BrowserPage() {
           serverNodeIp: profile.serverNodeIp 
         });
         
-        if (isMounted) {
-          setVncUrl(vncUrl);
-          setLoading(false);
-        }
+        safeSetState(setVncUrl, vncUrl);
+        safeSetState(setLoading, false);
       } catch (err) {
         console.error('Ошибка загрузки профиля:', err);
-        if (isMounted) {
-          setError('Не удалось загрузить профиль');
-          setLoading(false);
+        if (isMountedRef.current) {
+          safeSetState(setError, 'Не удалось загрузить профиль');
+          safeSetState(setLoading, false);
         }
       }
     };
 
     loadProfile();
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [profileId, isAuthenticated]); // Убрали fetchProfiles из зависимостей, чтобы избежать бесконечных циклов
+  }, [profileId, isAuthenticated, safeSetState]); // Добавили safeSetState в зависимости
 
   useEffect(() => {
     if (!vncUrl || !vncContainerRef.current) return;
@@ -120,9 +117,6 @@ export default function BrowserPage() {
 
     console.log('🖼️ Creating iframe with URL:', vncUrl);
 
-    // Флаг для предотвращения обновления состояния после размонтирования
-    let isMounted = true;
-
     // Создаем iframe для noVNC
     const iframe = document.createElement('iframe');
     iframe.src = vncUrl;
@@ -130,8 +124,11 @@ export default function BrowserPage() {
     iframe.style.height = '100%';
     iframe.style.border = 'none';
     iframe.setAttribute('allow', 'fullscreen');
-    // Убираем sandbox, так как он может блокировать WebSocket соединения noVNC
-    // iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    // Добавляем sandbox с минимальными разрешениями для безопасности, но разрешаем WebSocket
+    // allow-same-origin нужен для работы WebSocket в некоторых браузерах
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    // Добавляем атрибут для работы с куками (но это не поможет для cross-origin iframe)
+    iframe.setAttribute('credentialless', 'false');
     
     let loadTimeout: NodeJS.Timeout;
     let errorTimeout: NodeJS.Timeout;
@@ -139,7 +136,7 @@ export default function BrowserPage() {
     
     iframe.onload = () => {
       console.log('✅ iframe loaded successfully');
-      if (isMounted) {
+      if (isMountedRef.current) {
         clearTimeout(loadTimeout);
         clearTimeout(errorTimeout);
         clearTimeout(checkTimeout);
@@ -148,7 +145,7 @@ export default function BrowserPage() {
     
     iframe.onerror = (error) => {
       console.error('❌ iframe error:', error);
-      if (isMounted) {
+      if (isMountedRef.current) {
         clearTimeout(loadTimeout);
         clearTimeout(errorTimeout);
         clearTimeout(checkTimeout);
@@ -158,6 +155,7 @@ export default function BrowserPage() {
     
     // Проверяем доступность порта перед созданием iframe
     const checkPort = async () => {
+      if (!isMountedRef.current) return;
       try {
         const response = await fetch(vncUrl, { 
           method: 'HEAD', 
@@ -176,14 +174,14 @@ export default function BrowserPage() {
     
     // Таймаут для проверки загрузки (увеличиваем до 30 секунд для WebSocket)
     loadTimeout = setTimeout(() => {
-      if (isMounted) {
+      if (isMountedRef.current) {
         console.warn('⚠️ iframe loading timeout - проверяем доступность порта');
         // Проверяем доступность порта
         fetch(vncUrl, { method: 'HEAD', mode: 'no-cors' })
           .catch(() => {
-            if (isMounted) {
+            if (isMountedRef.current) {
               console.error('❌ Порт недоступен');
-              setError('Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
+              safeSetState(setError, 'Не удалось подключиться к браузеру. Проверьте, что профиль запущен и порт доступен.');
             }
           });
       }
@@ -191,22 +189,23 @@ export default function BrowserPage() {
     
     // Дополнительный таймаут для предупреждения
     errorTimeout = setTimeout(() => {
-      if (isMounted) {
+      if (isMountedRef.current) {
         console.warn('⚠️ iframe still loading after 15 seconds - это нормально для WebSocket соединений');
       }
     }, 15000);
     
-    vncContainerRef.current.innerHTML = '';
-    vncContainerRef.current.appendChild(iframe);
+    if (vncContainerRef.current && isMountedRef.current) {
+      vncContainerRef.current.innerHTML = '';
+      vncContainerRef.current.appendChild(iframe);
+    }
 
     return () => {
-      isMounted = false;
       clearTimeout(loadTimeout);
       clearTimeout(errorTimeout);
       clearTimeout(checkTimeout);
       // Не очищаем iframe при размонтировании, чтобы не прерывать соединение
     };
-  }, [vncUrl]);
+  }, [vncUrl, safeSetState]);
 
   // Используем useMemo для предотвращения лишних пересчетов
   const profile = useMemo(() => {

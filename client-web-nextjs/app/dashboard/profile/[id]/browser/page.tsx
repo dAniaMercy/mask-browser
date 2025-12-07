@@ -113,101 +113,99 @@ export default function BrowserPage() {
       return;
     }
 
-    console.log('🖼️ Creating iframe with URL:', vncUrl);
+    console.log('🖼️ Loading VNC content via proxy...');
 
-    // Создаем iframe для noVNC
-    const iframe = document.createElement('iframe');
-    iframe.src = vncUrl;
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = 'none';
-    iframe.setAttribute('allow', 'fullscreen');
-    // Добавляем sandbox с минимальными разрешениями для безопасности, но разрешаем WebSocket
-    // allow-same-origin нужен для работы WebSocket в некоторых браузерах
-    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
-    // Добавляем атрибут для работы с куками (но это не поможет для cross-origin iframe)
-    iframe.setAttribute('credentialless', 'false');
-    
-    let loadTimeout: NodeJS.Timeout;
-    let errorTimeout: NodeJS.Timeout;
-    let checkTimeout: NodeJS.Timeout;
-    
-    iframe.onload = () => {
-      console.log('✅ iframe loaded successfully');
-      if (isMountedRef.current) {
-        clearTimeout(loadTimeout);
-        clearTimeout(errorTimeout);
-        clearTimeout(checkTimeout);
-      }
-    };
-    
-    iframe.onerror = (error) => {
-      console.error('❌ iframe error:', error);
-      if (isMountedRef.current) {
-        clearTimeout(loadTimeout);
-        clearTimeout(errorTimeout);
-        clearTimeout(checkTimeout);
-        // Не устанавливаем ошибку сразу, даем время на загрузку WebSocket
-      }
-    };
-    
-    // Проверяем доступность прокси endpoint перед созданием iframe
-    const checkProxy = async () => {
-      if (!isMountedRef.current) return;
+    // Загружаем HTML через fetch с авторизацией, так как iframe не передает заголовки
+    const loadVncContent = async () => {
       try {
-        // Используем GET вместо HEAD для лучшей совместимости
-        const response = await fetch(vncUrl, { 
+        // Получаем токен из localStorage
+        const authStorage = localStorage.getItem('auth-storage');
+        let token = '';
+        if (authStorage) {
+          try {
+            const parsed = JSON.parse(authStorage);
+            token = parsed.state?.token || '';
+          } catch (e) {
+            console.error('Failed to parse auth storage:', e);
+          }
+        }
+
+        if (!token) {
+          safeSetState(setError, 'Требуется авторизация. Пожалуйста, войдите снова.');
+          return;
+        }
+
+        // Загружаем HTML через fetch с токеном
+        const response = await fetch(vncUrl, {
           method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
           credentials: 'include',
           cache: 'no-cache'
         });
-        if (response.ok) {
-          console.log('✅ Proxy endpoint is accessible');
-        } else {
-          console.warn('⚠️ Proxy endpoint returned:', response.status);
-        }
-      } catch (err) {
-        console.warn('⚠️ Proxy check failed:', err);
-        // Это может быть нормально, продолжаем
-      }
-    };
-    
-    // Проверяем прокси через небольшую задержку
-    checkTimeout = setTimeout(checkProxy, 1000);
-    
-    // Таймаут для проверки загрузки (увеличиваем до 30 секунд для WebSocket)
-    loadTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
-        console.warn('⚠️ iframe loading timeout - проверяем доступность прокси');
-        // Проверяем доступность прокси
-        fetch(vncUrl, { method: 'GET', credentials: 'include' })
-          .catch(() => {
-            if (isMountedRef.current) {
-              console.error('❌ Прокси недоступен');
-              safeSetState(setError, 'Не удалось подключиться к браузеру через прокси. Проверьте, что профиль запущен.');
-            }
-          });
-      }
-    }, 30000);
-    
-    // Дополнительный таймаут для предупреждения
-    errorTimeout = setTimeout(() => {
-      if (isMountedRef.current) {
-        console.warn('⚠️ iframe still loading after 15 seconds - это нормально для WebSocket соединений');
-      }
-    }, 15000);
-    
-    if (vncContainerRef.current && isMountedRef.current) {
-      vncContainerRef.current.innerHTML = '';
-      vncContainerRef.current.appendChild(iframe);
-    }
 
-    return () => {
-      clearTimeout(loadTimeout);
-      clearTimeout(errorTimeout);
-      clearTimeout(checkTimeout);
-      // Не очищаем iframe при размонтировании, чтобы не прерывать соединение
+        if (!response.ok) {
+          if (response.status === 401) {
+            safeSetState(setError, 'Сессия истекла. Пожалуйста, войдите снова.');
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const htmlContent = await response.text();
+        console.log('✅ VNC HTML loaded successfully');
+
+        // Создаем iframe и вставляем HTML через srcdoc
+        const iframe = document.createElement('iframe');
+        iframe.srcdoc = htmlContent;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        iframe.setAttribute('allow', 'fullscreen');
+        // Разрешаем все необходимое для работы noVNC
+        iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals');
+        
+        let loadTimeout: NodeJS.Timeout;
+        
+        iframe.onload = () => {
+          console.log('✅ iframe loaded successfully');
+          if (isMountedRef.current) {
+            clearTimeout(loadTimeout);
+          }
+        };
+        
+        iframe.onerror = (error) => {
+          console.error('❌ iframe error:', error);
+          if (isMountedRef.current) {
+            clearTimeout(loadTimeout);
+          }
+        };
+        
+        // Таймаут для проверки загрузки
+        loadTimeout = setTimeout(() => {
+          if (isMountedRef.current) {
+            console.warn('⚠️ iframe loading timeout - это может быть нормально для WebSocket соединений');
+          }
+        }, 30000);
+        
+        if (vncContainerRef.current && isMountedRef.current) {
+          vncContainerRef.current.innerHTML = '';
+          vncContainerRef.current.appendChild(iframe);
+        }
+
+        return () => {
+          clearTimeout(loadTimeout);
+        };
+      } catch (err) {
+        console.error('❌ Error loading VNC content:', err);
+        if (isMountedRef.current) {
+          safeSetState(setError, `Не удалось загрузить браузер: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`);
+        }
+      }
     };
+
+    loadVncContent();
   }, [vncUrl, safeSetState]);
 
   // Используем useMemo для предотвращения лишних пересчетов

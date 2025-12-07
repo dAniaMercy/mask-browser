@@ -6,29 +6,74 @@ using MaskBrowser.Server.Services;
 using System.Net.Http;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace MaskBrowser.Server.Controllers;
 
 [ApiController]
 [Route("api/profile/{profileId}/browser")]
-[Authorize]
+// Авторизация проверяется вручную в методах
 public class BrowserProxyController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly DockerService _dockerService;
     private readonly ILogger<BrowserProxyController> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
+    private readonly RsaKeyService _rsaKeyService;
 
     public BrowserProxyController(
         ApplicationDbContext context,
         DockerService dockerService,
         ILogger<BrowserProxyController> logger,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        RsaKeyService rsaKeyService)
     {
         _context = context;
         _dockerService = dockerService;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
+        _rsaKeyService = rsaKeyService;
+    }
+    
+    private int? ValidateTokenAndGetUserId(string? token)
+    {
+        if (string.IsNullOrEmpty(token))
+            return null;
+            
+        try
+        {
+            var publicKey = _rsaKeyService.GetPublicKey();
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _configuration["Jwt:Issuer"],
+                ValidAudience = _configuration["Jwt:Audience"],
+                IssuerSigningKey = publicKey
+            };
+            
+            var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
+            var userIdClaim = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+                return null;
+                
+            return userId;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate token from query parameter");
+            return null;
+        }
     }
 
     /// <summary>
@@ -94,6 +139,15 @@ public class BrowserProxyController : ControllerBase
                 var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
                 var wsProxyUrl = $"{apiBaseUrl}/api/profile/{profileId}/browser/ws";
                 
+                // Получаем токен из заголовка Authorization для передачи в WebSocket URL
+                var authHeader = Request.Headers["Authorization"].ToString();
+                if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
+                {
+                    var token = authHeader.Substring(7); // Убираем "Bearer "
+                    // Добавляем токен в WebSocket URL через query параметр (для авторизации в WebSocket)
+                    wsProxyUrl += $"?token={Uri.EscapeDataString(token)}";
+                }
+                
                 // Заменяем относительные WebSocket пути на наш прокси
                 content = content.Replace("'websockify'", $"'{wsProxyUrl}'");
                 content = content.Replace("\"websockify\"", $"\"{wsProxyUrl}\"");
@@ -103,6 +157,14 @@ public class BrowserProxyController : ControllerBase
                 // Также заменяем возможные абсолютные пути
                 content = content.Replace($"ws://{profile.ServerNodeIp}:{profile.Port}/websockify", wsProxyUrl);
                 content = content.Replace($"wss://{profile.ServerNodeIp}:{profile.Port}/websockify", wsProxyUrl.Replace("http://", "wss://").Replace("https://", "wss://"));
+                
+                // Заменяем все вхождения websockify на наш прокси URL
+                content = System.Text.RegularExpressions.Regex.Replace(
+                    content, 
+                    @"['""]websockify['""]", 
+                    $"'{wsProxyUrl}'",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
                 
                 _logger.LogInformation("✅ Modified noVNC HTML to use WebSocket proxy: {WsUrl}", wsProxyUrl);
             }
@@ -120,7 +182,7 @@ public class BrowserProxyController : ControllerBase
     /// Проксирование WebSocket соединений к websockify
     /// </summary>
     [HttpGet("ws")]
-    public async Task ProxyWebSocket([FromRoute] int profileId)
+    public async Task ProxyWebSocket([FromRoute] int profileId, [FromQuery] string? token = null)
     {
         if (!HttpContext.WebSockets.IsWebSocketRequest)
         {
@@ -130,7 +192,33 @@ public class BrowserProxyController : ControllerBase
 
         try
         {
-            var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+            // Проверяем авторизацию
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int userId;
+            
+            // Если пользователь не авторизован через стандартный механизм, проверяем токен из query
+            if (string.IsNullOrEmpty(userIdClaim) && !string.IsNullOrEmpty(token))
+            {
+                var userIdFromToken = ValidateTokenAndGetUserId(token);
+                if (userIdFromToken == null)
+                {
+                    HttpContext.Response.StatusCode = 401;
+                    await HttpContext.Response.WriteAsync("Unauthorized: Invalid token");
+                    return;
+                }
+                userId = userIdFromToken.Value;
+                _logger.LogInformation("✅ Authenticated via token from query parameter for user {UserId}", userId);
+            }
+            else if (!string.IsNullOrEmpty(userIdClaim))
+            {
+                userId = int.Parse(userIdClaim);
+            }
+            else
+            {
+                HttpContext.Response.StatusCode = 401;
+                await HttpContext.Response.WriteAsync("Unauthorized");
+                return;
+            }
             
             var profile = await _context.BrowserProfiles
                 .FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);

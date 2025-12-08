@@ -104,10 +104,12 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    app.UseHsts();
+    // Only use HSTS if HTTPS is configured
+    // app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// Only redirect to HTTPS if HTTPS is configured
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
@@ -139,15 +141,43 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     try
     {
-        dbContext.Database.Migrate();
-        Log.Information("Database migration completed successfully");
+        // Check if there are pending migrations
+        var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
+        if (pendingMigrations.Any())
+        {
+            Log.Warning("There are {Count} pending migrations: {Migrations}. Please create and apply migrations manually.",
+                pendingMigrations.Count, string.Join(", ", pendingMigrations));
+            // In production, don't auto-migrate if there are pending changes
+            if (app.Environment.IsDevelopment())
+            {
+                Log.Information("Running in Development mode, attempting to apply migrations...");
+                dbContext.Database.Migrate();
+                Log.Information("Database migration completed successfully");
+            }
+            else
+            {
+                Log.Warning("Skipping auto-migration in Production. Please apply migrations manually.");
+            }
+        }
+        else
+        {
+            // Only migrate if database is up to date
+            dbContext.Database.Migrate();
+            Log.Information("Database migration completed successfully");
+        }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "An error occurred while migrating the database");
+        Log.Error(ex, "An error occurred while migrating the database. Application will continue to start.");
+        // Don't throw - allow application to start even if migration fails
     }
 }
 
 Log.Information("MaskAdmin starting up...");
+Log.Information("Listening on: {Urls}", app.Urls);
+
+// Log environment info
+Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
+Log.Information("ASPNETCORE_URLS: {Urls}", Environment.GetEnvironmentVariable("ASPNETCORE_URLS"));
 
 app.Run();

@@ -182,7 +182,7 @@ public class UserController : ControllerBase
     /// Обновить информацию профиля
     /// </summary>
     [HttpPut("profile")]
-    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateUserProfileRequest request)
     {
         try
         {
@@ -278,7 +278,7 @@ public class UserController : ControllerBase
     }
 }
 
-public class UpdateProfileRequest
+public class UpdateUserProfileRequest
 {
     public string? Username { get; set; }
     public string? Email { get; set; }

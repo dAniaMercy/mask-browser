@@ -177,6 +177,53 @@ app.MapGet("/check-admin", async (ApplicationDbContext db) =>
     }
 });
 
+// Test password endpoint (for debugging)
+app.MapPost("/test-password", async (ApplicationDbContext db, ILogger<Program> logger, string username, string password) =>
+{
+    try
+    {
+        var userData = await db.Database.SqlQueryRaw<LoginUserData>(
+            "SELECT \"Id\", \"Username\", \"Email\", \"PasswordHash\", \"IsActive\", \"IsAdmin\" FROM \"Users\" WHERE \"Username\" = {0} OR \"Email\" = {1} LIMIT 1",
+            username, username
+        ).FirstOrDefaultAsync();
+        
+        if (userData == null)
+        {
+            return Results.Ok(new { found = false, message = "User not found" });
+        }
+        
+        var passwordValid = BCrypt.Net.BCrypt.Verify(password, userData.PasswordHash);
+        
+        return Results.Ok(new { 
+            found = true,
+            userId = userData.Id,
+            username = userData.Username,
+            email = userData.Email,
+            isActive = userData.IsActive,
+            isAdmin = userData.IsAdmin,
+            passwordValid = passwordValid,
+            hashLength = userData.PasswordHash?.Length ?? 0,
+            hashPrefix = userData.PasswordHash?.Substring(0, Math.Min(30, userData.PasswordHash.Length)) ?? "null"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error testing password");
+        return Results.Problem($"Error: {ex.Message}");
+    }
+});
+
+// Helper class for password test
+public class LoginUserData
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsAdmin { get; set; }
+}
+
 // Reset admin password endpoint
 app.MapPost("/reset-admin-password", async (ApplicationDbContext db, ILogger<Program> logger) =>
 {

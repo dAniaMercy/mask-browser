@@ -51,7 +51,99 @@
     "name": "Название",
     "status": "Статус",
     "node": "Сервер",
-    "port": "Порт"
+    "port": "Порт",
+    "noProfiles": "Нет профилей. Создайте первый профиль."
+  },
+  "userProfile": {
+    "title": "Мой профиль",
+    "subtitle": "Управление аккаунтом, настройками и безопасностью",
+    "tabs": {
+      "overview": "Обзор",
+      "statistics": "Статистика",
+      "settings": "Настройки",
+      "security": "Безопасность"
+    },
+    "overview": {
+      "accountInfo": "Информация об аккаунте",
+      "username": "Имя пользователя",
+      "email": "Email",
+      "balance": "Баланс",
+      "role": "Роль",
+      "admin": "Администратор",
+      "user": "Пользователь",
+      "twoFactorEnabled": "2FA включен",
+      "accountProtected": "Ваш аккаунт защищён",
+      "registrationDate": "Дата регистрации",
+      "lastLogin": "Последний вход",
+      "subscription": "Подписка",
+      "currentPlan": "Текущий план",
+      "maxProfiles": "Макс. профилей",
+      "status": "Статус",
+      "active": "Активна",
+      "inactive": "Неактивна",
+      "until": "До",
+      "manageSubscription": "Управление подпиской",
+      "noSubscription": "Подписка не активна",
+      "choosePlan": "Выбрать план",
+      "totalProfiles": "Всего профилей",
+      "activeProfiles": "Активных",
+      "payments": "Платежей",
+      "deposits": "Пополнений"
+    },
+    "statistics": {
+      "profileStats": "Статистика профилей",
+      "totalProfiles": "Всего профилей",
+      "active": "Активных",
+      "createdLast30Days": "Создано за 30 дней",
+      "byStatus": "По статусам",
+      "paymentStats": "Статистика платежей",
+      "totalPayments": "Всего платежей",
+      "completed": "Завершено",
+      "spent": "Потрачено",
+      "lastPayment": "Последний платеж",
+      "depositStats": "Статистика пополнений",
+      "totalDeposits": "Всего",
+      "pending": "Ожидание",
+      "deposited": "Пополнено",
+      "lastDeposit": "Последнее пополнение",
+      "recentActivity": "Недавняя активность",
+      "loading": "Загрузка статистики..."
+    },
+    "settings": {
+      "title": "Настройки профиля",
+      "username": "Имя пользователя",
+      "email": "Email",
+      "save": "Сохранить изменения",
+      "saving": "Сохранение..."
+    },
+    "security": {
+      "changePassword": "Изменить пароль",
+      "currentPassword": "Текущий пароль",
+      "newPassword": "Новый пароль",
+      "confirmPassword": "Подтвердите новый пароль",
+      "minLength": "Минимум 6 символов",
+      "change": "Изменить пароль",
+      "changing": "Изменение...",
+      "twoFactor": "Двухфакторная аутентификация",
+      "twoFactorEnabled": "2FA включена",
+      "twoFactorDisabled": "2FA отключена",
+      "twoFactorDescription": "Ваш аккаунт защищен двухфакторной аутентификацией",
+      "twoFactorDescriptionDisabled": "Включите 2FA для дополнительной защиты аккаунта",
+      "enable": "Включить",
+      "disable": "Отключить"
+    },
+    "loading": "Загрузка...",
+    "error": "Ошибка при загрузке данных",
+    "success": {
+      "profileUpdated": "Профиль успешно обновлен",
+      "passwordChanged": "Пароль успешно изменен"
+    },
+    "errors": {
+      "passwordsMismatch": "Новые пароли не совпадают",
+      "passwordTooShort": "Пароль должен быть минимум 6 символов",
+      "updateFailed": "Ошибка при обновлении профиля",
+      "passwordChangeFailed": "Ошибка при изменении пароля"
+    }
   }
 }
 

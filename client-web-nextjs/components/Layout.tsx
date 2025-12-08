@@ -61,6 +61,13 @@ export default function Layout({ children }: LayoutProps) {
             </div>
             <div className="flex items-center space-x-4">
               <Link
+                href="/dashboard/profile"
+                className="p-2 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400"
+                title="Профиль"
+              >
+                <User className="w-5 h-5" />
+              </Link>
+              <Link
                 href="/dashboard/settings"
                 className="p-2 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400"
                 title={t('common.settings')}
@@ -68,11 +75,15 @@ export default function Layout({ children }: LayoutProps) {
                 <Settings className="w-5 h-5" />
               </Link>
               <ThemeToggle />
-              <span className="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
-                <User className="w-4 h-4" />
+              <Link
+                href="/dashboard/profile"
+                className="flex items-center space-x-2 text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400"
+              >
                 <span>{user?.username}</span>
-                <Shield className="w-4 h-4 text-green-500" {...({ title: '2FA включен' } as any)} />
-              </span>
+                {user?.twoFactorEnabled && (
+                  <Shield className="w-4 h-4 text-green-500" title="2FA включен" />
+                )}
+              </Link>
               <button
                 onClick={handleLogout}
                 className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white"

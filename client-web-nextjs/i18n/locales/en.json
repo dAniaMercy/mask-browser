@@ -51,7 +51,99 @@
     "name": "Name",
     "status": "Status",
     "node": "Server",
-    "port": "Port"
+    "port": "Port",
+    "noProfiles": "No profiles. Create your first profile."
+  },
+  "userProfile": {
+    "title": "My Profile",
+    "subtitle": "Account, settings and security management",
+    "tabs": {
+      "overview": "Overview",
+      "statistics": "Statistics",
+      "settings": "Settings",
+      "security": "Security"
+    },
+    "overview": {
+      "accountInfo": "Account Information",
+      "username": "Username",
+      "email": "Email",
+      "balance": "Balance",
+      "role": "Role",
+      "admin": "Administrator",
+      "user": "User",
+      "twoFactorEnabled": "2FA enabled",
+      "accountProtected": "Your account is protected",
+      "registrationDate": "Registration Date",
+      "lastLogin": "Last Login",
+      "subscription": "Subscription",
+      "currentPlan": "Current Plan",
+      "maxProfiles": "Max Profiles",
+      "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "until": "Until",
+      "manageSubscription": "Manage Subscription",
+      "noSubscription": "No active subscription",
+      "choosePlan": "Choose Plan",
+      "totalProfiles": "Total Profiles",
+      "activeProfiles": "Active",
+      "payments": "Payments",
+      "deposits": "Deposits"
+    },
+    "statistics": {
+      "profileStats": "Profile Statistics",
+      "totalProfiles": "Total Profiles",
+      "active": "Active",
+      "createdLast30Days": "Created Last 30 Days",
+      "byStatus": "By Status",
+      "paymentStats": "Payment Statistics",
+      "totalPayments": "Total Payments",
+      "completed": "Completed",
+      "spent": "Spent",
+      "lastPayment": "Last Payment",
+      "depositStats": "Deposit Statistics",
+      "totalDeposits": "Total",
+      "pending": "Pending",
+      "deposited": "Deposited",
+      "lastDeposit": "Last Deposit",
+      "recentActivity": "Recent Activity",
+      "loading": "Loading statistics..."
+    },
+    "settings": {
+      "title": "Profile Settings",
+      "username": "Username",
+      "email": "Email",
+      "save": "Save Changes",
+      "saving": "Saving..."
+    },
+    "security": {
+      "changePassword": "Change Password",
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
+      "minLength": "Minimum 6 characters",
+      "change": "Change Password",
+      "changing": "Changing...",
+      "twoFactor": "Two-Factor Authentication",
+      "twoFactorEnabled": "2FA enabled",
+      "twoFactorDisabled": "2FA disabled",
+      "twoFactorDescription": "Your account is protected with two-factor authentication",
+      "twoFactorDescriptionDisabled": "Enable 2FA for additional account protection",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "loading": "Loading...",
+    "error": "Error loading data",
+    "success": {
+      "profileUpdated": "Profile updated successfully",
+      "passwordChanged": "Password changed successfully"
+    },
+    "errors": {
+      "passwordsMismatch": "New passwords do not match",
+      "passwordTooShort": "Password must be at least 6 characters",
+      "updateFailed": "Error updating profile",
+      "passwordChangeFailed": "Error changing password"
+    }
   }
 }
 

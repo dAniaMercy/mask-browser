@@ -1,6 +1,7 @@
 using MaskAdmin.Data;
 using MaskAdmin.Models;
 using MaskAdmin.Services;
+using MaskAdmin.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -99,6 +100,9 @@ builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IExportService, ExportService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 
+// Background Services
+builder.Services.AddHostedService<RateLimitCleanupService>();
+
 // HTTP Client with Polly
 builder.Services.AddHttpClient("MaskBrowserAPI", client =>
 {
@@ -109,12 +113,14 @@ builder.Services.AddHttpClient("MaskBrowserAPI", client =>
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program));
 
-// Session
+// Session with enhanced security
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(30);
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // Use Secure cookies in production
+    options.Cookie.SameSite = SameSiteMode.Strict; // CSRF protection
 });
 
 var app = builder.Build();
@@ -123,15 +129,21 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // Only use HSTS if HTTPS is configured
-    // app.UseHsts();
+    // Use HSTS in production
+    app.UseHsts();
 }
 
-// Only redirect to HTTPS if HTTPS is configured
-// app.UseHttpsRedirection();
+// Redirect to HTTPS in production
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 
 app.UseRouting();
+
+// Rate Limiting (before authentication)
+app.UseMiddleware<RateLimitingMiddleware>();
 
 // Prometheus metrics
 app.UseHttpMetrics();
@@ -212,17 +224,6 @@ app.MapPost("/test-password", async (ApplicationDbContext db, ILogger<Program> l
         return Results.Problem($"Error: {ex.Message}");
     }
 });
-
-// Helper class for password test
-public class LoginUserData
-{
-    public int Id { get; set; }
-    public string Username { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string PasswordHash { get; set; } = string.Empty;
-    public bool IsActive { get; set; }
-    public bool IsAdmin { get; set; }
-}
 
 // Reset admin password endpoint
 app.MapPost("/reset-admin-password", async (ApplicationDbContext db, ILogger<Program> logger) =>
@@ -414,3 +415,14 @@ Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
 Log.Information("ASPNETCORE_URLS: {Urls}", Environment.GetEnvironmentVariable("ASPNETCORE_URLS"));
 
 app.Run();
+
+// Helper class for password test (must be after all top-level statements)
+public class LoginUserData
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsAdmin { get; set; }
+}

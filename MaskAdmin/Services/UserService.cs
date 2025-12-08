@@ -43,12 +43,10 @@ public class UserService : IUserService
                 switch (status.ToLower())
                 {
                     case "active":
-                        query = query.Where(u => u.IsActive);
+                        query = query.Where(u => u.IsActive && !u.IsBanned && !u.IsFrozen);
                         break;
                     case "banned":
-                        // Note: IsBanned column may not exist in database yet
-                        // query = query.Where(u => u.IsBanned);
-                        query = query.Where(u => !u.IsActive); // Temporary workaround
+                        query = query.Where(u => u.IsBanned);
                         break;
                     case "frozen":
                         query = query.Where(u => u.IsFrozen);
@@ -187,9 +185,8 @@ public class UserService : IUserService
             var user = await _context.Users.FindAsync(id);
             if (user == null) return false;
 
-            // Note: IsBanned column may not exist in database yet
-            // user.IsBanned = true;
-            user.IsActive = false;
+            user.IsBanned = true;
+            user.IsActive = false; // Also deactivate the account
 
             await _context.SaveChangesAsync();
 
@@ -219,9 +216,8 @@ public class UserService : IUserService
             var user = await _context.Users.FindAsync(id);
             if (user == null) return false;
 
-            // Note: IsBanned column may not exist in database yet
-            // user.IsBanned = false;
-            user.IsActive = true;
+            user.IsBanned = false;
+            user.IsActive = true; // Re-activate the account
 
             await _context.SaveChangesAsync();
 

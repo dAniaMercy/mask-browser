@@ -1,0 +1,491 @@
+@model MaskAdmin.ViewModels.DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+    ViewData["LayoutClass"] = "container-fluid";
+}
+
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
+        <div class="text-muted">
+            <i class="bi bi-clock"></i> Last updated: <span id="lastUpdated">@DateTime.Now.ToString("HH:mm:ss")</span>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <!-- Total Users Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Users
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                @Model.Stats.TotalUsers
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <span class="text-success">+@Model.Stats.NewUsersToday</span> today
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-people fs-2 text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Profiles Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Browser Profiles
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                @Model.Stats.TotalProfiles
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <span class="text-success">@Model.Stats.ActiveProfiles active</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-browser-chrome fs-2 text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Revenue
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                $@Model.Stats.TotalRevenue.ToString("N2")
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <span class="text-success">$@Model.Stats.RevenueToday.ToString("N2")</span> today
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-currency-dollar fs-2 text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Servers Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Server Nodes
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                @Model.Stats.TotalServers
+                            </div>
+                            <div class="text-xs text-muted mt-1">
+                                <span class="text-success">@Model.Stats.HealthyServers healthy</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-server fs-2 text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Users Chart -->
+        <div class="col-xl-8 col-lg-7 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">User Registrations (Last 7 Days)</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="usersChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profiles Pie Chart -->
+        <div class="col-xl-4 col-lg-5 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Profile Status Distribution</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="profilesStatusChart"></canvas>
+                    <div class="mt-3 text-center text-sm">
+                        <span class="mr-2">
+                            <i class="bi bi-circle-fill text-success"></i> Running
+                        </span>
+                        <span class="mr-2">
+                            <i class="bi bi-circle-fill text-danger"></i> Stopped
+                        </span>
+                        <span class="mr-2">
+                            <i class="bi bi-circle-fill text-warning"></i> Error
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue & Profiles Charts Row -->
+    <div class="row mb-4">
+        <!-- Revenue Chart -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-success">Revenue Overview (Last 30 Days)</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profiles Creation Chart -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-info">Profile Creation (Last 7 Days)</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="profilesChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tables Row -->
+    <div class="row">
+        <!-- Top Users -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Top Users by Profiles</h6>
+                    <a asp-controller="Users" asp-action="Index" class="btn btn-sm btn-primary">View All</a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Profiles</th>
+                                    <th>Tier</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in Model.TopUsers)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a asp-controller="Users" asp-action="Details" asp-route-id="@user.UserId">
+                                                @user.Username
+                                            </a>
+                                        </td>
+                                        <td>@user.Email</td>
+                                        <td>
+                                            <span class="badge bg-primary">@user.ProfileCount</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info">@user.SubscriptionTier</span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Activity</h6>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        @foreach (var activity in Model.RecentActivities)
+                        {
+                            <div class="list-group-item px-0">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">@activity.Action</h6>
+                                    <small class="text-muted">@activity.Timestamp.ToString("HH:mm")</small>
+                                </div>
+                                <p class="mb-1">@activity.Description</p>
+                                <small class="text-muted">@activity.Username</small>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Nodes Status -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Server Nodes Status</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>IP Address</th>
+                                    <th>Status</th>
+                                    <th>Containers</th>
+                                    <th>CPU</th>
+                                    <th>Memory</th>
+                                    <th>Last Check</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var server in Model.ServerNodes)
+                                {
+                                    <tr>
+                                        <td>@server.Name</td>
+                                        <td>
+                                            <code>@server.IpAddress</code>
+                                        </td>
+                                        <td>
+                                            @if (server.IsHealthy)
+                                            {
+                                                <span class="badge bg-success">
+                                                    <i class="bi bi-check-circle"></i> Healthy
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger">
+                                                    <i class="bi bi-x-circle"></i> Unhealthy
+                                                </span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar @(server.ContainerUsagePercent > 80 ? "bg-danger" : server.ContainerUsagePercent > 60 ? "bg-warning" : "bg-success")"
+                                                     role="progressbar"
+                                                     style="width: @server.ContainerUsagePercent%"
+                                                     aria-valuenow="@server.ContainerUsagePercent"
+                                                     aria-valuemin="0"
+                                                     aria-valuemax="100">
+                                                    @server.ActiveContainers / @server.MaxContainers
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="badge @(server.CpuUsage > 80 ? "bg-danger" : server.CpuUsage > 60 ? "bg-warning" : "bg-success")">
+                                                @server.CpuUsage.ToString("F1")%
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge @(server.MemoryUsage > 80 ? "bg-danger" : server.MemoryUsage > 60 ? "bg-warning" : "bg-success")">
+                                                @server.MemoryUsage.ToString("F1")%
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <small class="text-muted">
+                                                @if (server.LastHealthCheck.HasValue)
+                                                {
+                                                    var timeAgo = DateTime.UtcNow - server.LastHealthCheck.Value;
+                                                    if (timeAgo.TotalMinutes < 1)
+                                                    {
+                                                        <span>@((int)timeAgo.TotalSeconds)s ago</span>
+                                                    }
+                                                    else if (timeAgo.TotalHours < 1)
+                                                    {
+                                                        <span>@((int)timeAgo.TotalMinutes)m ago</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>@((int)timeAgo.TotalHours)h ago</span>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span>Never</span>
+                                                }
+                                            </small>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        // Users Chart
+        const usersCtx = document.getElementById('usersChart').getContext('2d');
+        const usersChart = new Chart(usersCtx, {
+            type: 'line',
+            data: {
+                labels: [@Html.Raw(string.Join(",", Model.UsersChartData.Select(d => $"'{d.Label}'")))],
+                datasets: [{
+                    label: 'New Users',
+                    data: [@Html.Raw(string.Join(",", Model.UsersChartData.Select(d => d.Value)))],
+                    borderColor: 'rgb(78, 115, 223)',
+                    backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+
+        // Revenue Chart
+        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+        const revenueChart = new Chart(revenueCtx, {
+            type: 'bar',
+            data: {
+                labels: [@Html.Raw(string.Join(",", Model.RevenueChartData.Select(d => $"'{d.Label}'")))],
+                datasets: [{
+                    label: 'Revenue ($)',
+                    data: [@Html.Raw(string.Join(",", Model.RevenueChartData.Select(d => d.Value)))],
+                    backgroundColor: 'rgba(28, 200, 138, 0.8)',
+                    borderColor: 'rgb(28, 200, 138)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Profiles Chart
+        const profilesCtx = document.getElementById('profilesChart').getContext('2d');
+        const profilesChart = new Chart(profilesCtx, {
+            type: 'line',
+            data: {
+                labels: [@Html.Raw(string.Join(",", Model.ProfilesChartData.Select(d => $"'{d.Label}'")))],
+                datasets: [{
+                    label: 'New Profiles',
+                    data: [@Html.Raw(string.Join(",", Model.ProfilesChartData.Select(d => d.Value)))],
+                    borderColor: 'rgb(54, 185, 204)',
+                    backgroundColor: 'rgba(54, 185, 204, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+
+        // Profile Status Pie Chart
+        const profilesStatusCtx = document.getElementById('profilesStatusChart').getContext('2d');
+        const profilesStatusChart = new Chart(profilesStatusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Running', 'Stopped', 'Error'],
+                datasets: [{
+                    data: [@Model.Stats.ActiveProfiles, @(Model.Stats.TotalProfiles - Model.Stats.ActiveProfiles - Model.Stats.ErrorProfiles), @Model.Stats.ErrorProfiles],
+                    backgroundColor: [
+                        'rgba(28, 200, 138, 0.8)',
+                        'rgba(224, 224, 224, 0.8)',
+                        'rgba(231, 74, 59, 0.8)'
+                    ],
+                    borderColor: [
+                        'rgb(28, 200, 138)',
+                        'rgb(224, 224, 224)',
+                        'rgb(231, 74, 59)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Auto-refresh stats every 30 seconds
+        setInterval(() => {
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+            // TODO: Fetch updated stats via AJAX
+        }, 30000);
+    </script>
+}

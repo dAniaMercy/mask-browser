@@ -1,0 +1,325 @@
+@model (List<MaskAdmin.Models.AuditLog> Logs, int TotalCount, int CurrentPage, int PageSize, string Search, string Category, string Level, DateTime? DateFrom, DateTime? DateTo)
+@{
+    ViewData["Title"] = "Audit Logs";
+    ViewData["LayoutClass"] = "container-fluid";
+
+    var totalPages = (int)Math.Ceiling((double)Model.TotalCount / Model.PageSize);
+}
+
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="bi bi-file-text"></i> Audit Logs
+        </h1>
+        <div>
+            <button class="btn btn-success" onclick="exportLogs('csv')">
+                <i class="bi bi-download"></i> Export CSV
+            </button>
+            <button class="btn btn-primary" onclick="exportLogs('excel')">
+                <i class="bi bi-file-excel"></i> Export Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="bi bi-funnel"></i> Filters
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="get" asp-action="Index" class="row g-3">
+                <div class="col-md-3">
+                    <label for="search" class="form-label">Search</label>
+                    <input type="text" class="form-control" id="search" name="search"
+                           value="@Model.Search" placeholder="Action, entity, username...">
+                </div>
+                <div class="col-md-2">
+                    <label for="category" class="form-label">Category</label>
+                    <select class="form-select" id="category" name="category">
+                        <option value="">All Categories</option>
+                        <option value="Authentication" selected="@(Model.Category == "Authentication")">Authentication</option>
+                        <option value="UserManagement" selected="@(Model.Category == "UserManagement")">User Management</option>
+                        <option value="ProfileManagement" selected="@(Model.Category == "ProfileManagement")">Profile Management</option>
+                        <option value="ServerManagement" selected="@(Model.Category == "ServerManagement")">Server Management</option>
+                        <option value="PaymentManagement" selected="@(Model.Category == "PaymentManagement")">Payment Management</option>
+                        <option value="SubscriptionManagement" selected="@(Model.Category == "SubscriptionManagement")">Subscription Management</option>
+                        <option value="SystemConfiguration" selected="@(Model.Category == "SystemConfiguration")">System Configuration</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="level" class="form-label">Level</label>
+                    <select class="form-select" id="level" name="level">
+                        <option value="">All Levels</option>
+                        <option value="Debug" selected="@(Model.Level == "Debug")">Debug</option>
+                        <option value="Info" selected="@(Model.Level == "Info")">Info</option>
+                        <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
+                        <option value="Error" selected="@(Model.Level == "Error")">Error</option>
+                        <option value="Critical" selected="@(Model.Level == "Critical")">Critical</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="dateFrom" class="form-label">Date From</label>
+                    <input type="date" class="form-control" id="dateFrom" name="dateFrom"
+                           value="@Model.DateFrom?.ToString("yyyy-MM-dd")">
+                </div>
+                <div class="col-md-2">
+                    <label for="dateTo" class="form-label">Date To</label>
+                    <input type="date" class="form-control" id="dateTo" name="dateTo"
+                           value="@Model.DateTo?.ToString("yyyy-MM-dd")">
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Apply
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Logs Table Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                Audit Logs (@Model.TotalCount total)
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">Timestamp</th>
+                            <th style="width: 60px;">Level</th>
+                            <th style="width: 120px;">Category</th>
+                            <th style="width: 100px;">User</th>
+                            <th style="width: 120px;">Action</th>
+                            <th style="width: 100px;">Entity</th>
+                            <th style="width: 80px;">Entity ID</th>
+                            <th>Details</th>
+                            <th style="width: 100px;">IP Address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Logs.Any())
+                        {
+                            @foreach (var log in Model.Logs)
+                            {
+                                <tr class="@GetRowClass(log.Level)">
+                                    <td>
+                                        <small class="text-muted">
+                                            @log.CreatedAt.ToString("yyyy-MM-dd")
+                                            <br />
+                                            @log.CreatedAt.ToString("HH:mm:ss")
+                                        </small>
+                                    </td>
+                                    <td>
+                                        @switch (log.Level)
+                                        {
+                                            case MaskAdmin.Models.AuditLogLevel.Debug:
+                                                <span class="badge bg-secondary">Debug</span>
+                                                break;
+                                            case MaskAdmin.Models.AuditLogLevel.Info:
+                                                <span class="badge bg-info">Info</span>
+                                                break;
+                                            case MaskAdmin.Models.AuditLogLevel.Warning:
+                                                <span class="badge bg-warning text-dark">Warning</span>
+                                                break;
+                                            case MaskAdmin.Models.AuditLogLevel.Error:
+                                                <span class="badge bg-danger">Error</span>
+                                                break;
+                                            case MaskAdmin.Models.AuditLogLevel.Critical:
+                                                <span class="badge bg-dark">Critical</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>
+                                        <small>@log.Category</small>
+                                    </td>
+                                    <td>
+                                        @if (log.UserId.HasValue && log.User != null)
+                                        {
+                                            <a asp-controller="Users" asp-action="Details" asp-route-id="@log.UserId">
+                                                @log.User.Username
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">System</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <strong>@log.Action</strong>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">@log.Entity</small>
+                                    </td>
+                                    <td>
+                                        @if (log.EntityId.HasValue)
+                                        {
+                                            <code>@log.EntityId</code>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(log.OldValues) || !string.IsNullOrEmpty(log.NewValues) || !string.IsNullOrEmpty(log.AdditionalData))
+                                        {
+                                            <button class="btn btn-sm btn-outline-info"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#detailsModal"
+                                                    onclick="showLogDetails(@log.Id, '@Html.Raw(log.OldValues?.Replace("'", "\\'"))', '@Html.Raw(log.NewValues?.Replace("'", "\\'"))', '@Html.Raw(log.AdditionalData?.Replace("'", "\\'"))')">
+                                                <i class="bi bi-eye"></i> View
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <small><code>@log.IpAddress</code></small>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox fs-1"></i>
+                                    <p class="mt-2">No audit logs found</p>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            @if (totalPages > 1)
+            {
+                <nav aria-label="Page navigation" class="mt-3">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(Model.CurrentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" href="?page=@(Model.CurrentPage - 1)&search=@Model.Search&category=@Model.Category&level=@Model.Level&dateFrom=@Model.DateFrom?.ToString("yyyy-MM-dd")&dateTo=@Model.DateTo?.ToString("yyyy-MM-dd")">
+                                Previous
+                            </a>
+                        </li>
+
+                        @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(totalPages, Model.CurrentPage + 2); i++)
+                        {
+                            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                <a class="page-link" href="?page=@i&search=@Model.Search&category=@Model.Category&level=@Model.Level&dateFrom=@Model.DateFrom?.ToString("yyyy-MM-dd")&dateTo=@Model.DateTo?.ToString("yyyy-MM-dd")">
+                                    @i
+                                </a>
+                            </li>
+                        }
+
+                        <li class="page-item @(Model.CurrentPage == totalPages ? "disabled" : "")">
+                            <a class="page-link" href="?page=@(Model.CurrentPage + 1)&search=@Model.Search&category=@Model.Category&level=@Model.Level&dateFrom=@Model.DateFrom?.ToString("yyyy-MM-dd")&dateTo=@Model.DateTo?.ToString("yyyy-MM-dd")">
+                                Next
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsModalLabel">Log Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="oldValuesSection" class="mb-3" style="display: none;">
+                    <h6 class="text-danger">Old Values:</h6>
+                    <pre id="oldValues" class="bg-light p-3 rounded"></pre>
+                </div>
+                <div id="newValuesSection" class="mb-3" style="display: none;">
+                    <h6 class="text-success">New Values:</h6>
+                    <pre id="newValues" class="bg-light p-3 rounded"></pre>
+                </div>
+                <div id="additionalDataSection" class="mb-3" style="display: none;">
+                    <h6 class="text-info">Additional Data:</h6>
+                    <pre id="additionalData" class="bg-light p-3 rounded"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    string GetRowClass(MaskAdmin.Models.AuditLogLevel level)
+    {
+        return level switch
+        {
+            MaskAdmin.Models.AuditLogLevel.Error => "table-danger",
+            MaskAdmin.Models.AuditLogLevel.Critical => "table-dark text-white",
+            MaskAdmin.Models.AuditLogLevel.Warning => "table-warning",
+            _ => ""
+        };
+    }
+}
+
+@section Scripts {
+    <script>
+        function showLogDetails(logId, oldValues, newValues, additionalData) {
+            // Old Values
+            if (oldValues && oldValues !== 'null' && oldValues !== '') {
+                try {
+                    const oldObj = JSON.parse(oldValues);
+                    document.getElementById('oldValues').textContent = JSON.stringify(oldObj, null, 2);
+                    document.getElementById('oldValuesSection').style.display = 'block';
+                } catch (e) {
+                    document.getElementById('oldValues').textContent = oldValues;
+                    document.getElementById('oldValuesSection').style.display = 'block';
+                }
+            } else {
+                document.getElementById('oldValuesSection').style.display = 'none';
+            }
+
+            // New Values
+            if (newValues && newValues !== 'null' && newValues !== '') {
+                try {
+                    const newObj = JSON.parse(newValues);
+                    document.getElementById('newValues').textContent = JSON.stringify(newObj, null, 2);
+                    document.getElementById('newValuesSection').style.display = 'block';
+                } catch (e) {
+                    document.getElementById('newValues').textContent = newValues;
+                    document.getElementById('newValuesSection').style.display = 'block';
+                }
+            } else {
+                document.getElementById('newValuesSection').style.display = 'none';
+            }
+
+            // Additional Data
+            if (additionalData && additionalData !== 'null' && additionalData !== '') {
+                try {
+                    const addObj = JSON.parse(additionalData);
+                    document.getElementById('additionalData').textContent = JSON.stringify(addObj, null, 2);
+                    document.getElementById('additionalDataSection').style.display = 'block';
+                } catch (e) {
+                    document.getElementById('additionalData').textContent = additionalData;
+                    document.getElementById('additionalDataSection').style.display = 'block';
+                }
+            } else {
+                document.getElementById('additionalDataSection').style.display = 'none';
+            }
+        }
+
+        function exportLogs(format) {
+            const params = new URLSearchParams(window.location.search);
+            params.set('format', format);
+            window.location.href = '/Logs/Export?' + params.toString();
+        }
+    </script>
+}

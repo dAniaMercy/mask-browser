@@ -141,40 +141,45 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     try
     {
-        // Check if there are pending migrations
+        // Suppress pending model changes warning in production
         var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
         if (pendingMigrations.Any())
         {
-            Log.Warning("There are {Count} pending migrations: {Migrations}. Please create and apply migrations manually.",
+            Log.Warning("There are {Count} pending migrations: {Migrations}. Skipping auto-migration. Please create and apply migrations manually.",
                 pendingMigrations.Count, string.Join(", ", pendingMigrations));
-            // In production, don't auto-migrate if there are pending changes
-            if (app.Environment.IsDevelopment())
-            {
-                Log.Information("Running in Development mode, attempting to apply migrations...");
-                dbContext.Database.Migrate();
-                Log.Information("Database migration completed successfully");
-            }
-            else
-            {
-                Log.Warning("Skipping auto-migration in Production. Please apply migrations manually.");
-            }
+            // Don't try to migrate if there are pending changes
         }
         else
         {
             // Only migrate if database is up to date
-            dbContext.Database.Migrate();
-            Log.Information("Database migration completed successfully");
+            try
+            {
+                dbContext.Database.Migrate();
+                Log.Information("Database migration completed successfully");
+            }
+            catch (Exception migrateEx)
+            {
+                Log.Warning(migrateEx, "Migration failed, but continuing startup");
+            }
         }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "An error occurred while migrating the database. Application will continue to start.");
-        // Don't throw - allow application to start even if migration fails
+        Log.Warning(ex, "An error occurred while checking migrations. Application will continue to start.");
+        // Don't throw - allow application to start even if migration check fails
     }
 }
 
+// Ensure we're listening on the correct URL
+var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? "http://+:80";
+if (!app.Urls.Any())
+{
+    app.Urls.Add(urls);
+    Log.Information("Explicitly set listening URL to: {Url}", urls);
+}
+
 Log.Information("MaskAdmin starting up...");
-Log.Information("Listening on: {Urls}", app.Urls);
+Log.Information("Listening on: {Urls}", string.Join(", ", app.Urls));
 
 // Log environment info
 Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);

@@ -38,35 +38,34 @@ public class AuthController : Controller
         // Check if admin user exists, create if not
         try
         {
-            var existingAdmin = await _context.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+            // Use SQL to avoid loading IsBanned column
+            var adminId = await _context.Database.SqlQueryRaw<int>(
+                "SELECT \"Id\" FROM \"Users\" WHERE \"Username\" = 'admin' OR \"Email\" = 'admin@maskbrowser.com' LIMIT 1"
+            ).FirstOrDefaultAsync();
+            
+            var existingAdmin = adminId > 0 ? await _context.Users.FindAsync(adminId) : null;
             if (existingAdmin == null)
             {
                 _logger.LogWarning("Admin user not found, creating default admin user");
                 
-                // Get next available ID
-                var maxId = await _context.Users.AnyAsync() 
-                    ? await _context.Users.MaxAsync(u => (int?)u.Id) ?? 0 
-                    : 0;
+                // Get next available ID using SQL
+                var maxIdResult = await _context.Database.SqlQueryRaw<int>(
+                    "SELECT COALESCE(MAX(\"Id\"), 0) FROM \"Users\""
+                ).FirstOrDefaultAsync();
+                var newId = maxIdResult + 1;
                 
-                var adminUser = new Models.User
-                {
-                    Id = maxId + 1,
-                    Username = "admin",
-                    Email = "admin@maskbrowser.com",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
-                    IsActive = true,
-                    IsAdmin = true,
-                    IsBanned = false,
-                    IsFrozen = false,
-                    Balance = 0,
-                    CreatedAt = DateTime.UtcNow
-                };
+                // Create admin user using direct SQL to avoid IsBanned column
+                var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+                var createdAt = DateTime.UtcNow;
                 
                 try
                 {
-                    _context.Users.Add(adminUser);
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Default admin user created successfully with ID: {Id}", adminUser.Id);
+                    await _context.Database.ExecuteSqlRawAsync(
+                        @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsFrozen"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
+                          VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10})",
+                        newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, false, true, false, (string?)null, createdAt);
+                    
+                    _logger.LogInformation("Default admin user created successfully via SQL with ID: {Id}", newId);
                 }
                 catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
                 {
@@ -76,13 +75,13 @@ public class AuthController : Controller
             }
             else
             {
-                // Ensure admin user has correct permissions
+                // Ensure admin user has correct permissions using SQL
                 if (!existingAdmin.IsAdmin || !existingAdmin.IsActive)
                 {
-                    existingAdmin.IsAdmin = true;
-                    existingAdmin.IsActive = true;
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Updated existing admin user permissions");
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE \"Users\" SET \"IsActive\" = true, \"IsAdmin\" = true WHERE \"Id\" = {0}",
+                        existingAdmin.Id);
+                    _logger.LogInformation("Updated existing admin user permissions via SQL");
                 }
             }
         }

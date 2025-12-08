@@ -159,7 +159,11 @@ app.MapGet("/check-admin", async (ApplicationDbContext db) =>
 {
     try
     {
-        var adminExists = await db.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+        // Use Select to avoid IsBanned column issue
+        var adminExists = await db.Users
+            .Where(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com")
+            .Select(u => u.Id)
+            .AnyAsync();
         var userCount = await db.Users.CountAsync();
         return Results.Ok(new { 
             adminExists, 
@@ -178,56 +182,57 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
 {
     try
     {
-        // Check if admin already exists
-        var existingAdmin = await db.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
-        if (existingAdmin != null)
+        // Check if admin already exists (using SQL to avoid IsBanned column issue)
+        var adminIdResult = await db.Database.SqlQueryRaw<int>(
+            "SELECT \"Id\" FROM \"Users\" WHERE \"Username\" = 'admin' OR \"Email\" = 'admin@maskbrowser.com' LIMIT 1"
+        ).FirstOrDefaultAsync();
+        
+        var adminId = adminIdResult;
+        
+        if (adminId > 0)
         {
-            // Update existing admin to ensure it's active and has admin rights
-            existingAdmin.IsActive = true;
-            existingAdmin.IsAdmin = true;
-            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
-            await db.SaveChangesAsync();
+            // Update existing admin using direct SQL to avoid IsBanned
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE \"Users\" SET \"IsActive\" = true, \"IsAdmin\" = true, \"PasswordHash\" = {0} WHERE \"Id\" = {1}",
+                passwordHash, adminId);
+            
+            logger.LogInformation("Admin user updated via SQL, ID: {Id}", adminId);
             
             return Results.Ok(new { 
                 message = "Admin user already exists, password reset to default",
                 created = false,
                 updated = true,
+                id = adminId,
                 username = "admin",
                 email = "admin@maskbrowser.com",
                 password = "Admin123!"
             });
         }
 
-        // Check for ID conflicts (seed data might have created user with ID=1)
-        var maxId = await db.Users.AnyAsync() 
-            ? await db.Users.MaxAsync(u => (int?)u.Id) ?? 0 
-            : 0;
+        // Get next available ID using SQL
+        var maxIdResult = await db.Database.SqlQueryRaw<int>(
+            "SELECT COALESCE(MAX(\"Id\"), 0) FROM \"Users\""
+        ).FirstOrDefaultAsync();
+        var newId = maxIdResult + 1;
         
-        var adminUser = new User
-        {
-            Id = maxId + 1, // Use next available ID
-            Username = "admin",
-            Email = "admin@maskbrowser.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
-            IsActive = true,
-            IsAdmin = true,
-            IsBanned = false,
-            IsFrozen = false,
-            Balance = 0,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        db.Users.Add(adminUser);
+        // Create admin user using direct SQL to avoid IsBanned column
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+        var createdAt = DateTime.UtcNow;
         
         try
         {
-            await db.SaveChangesAsync();
-            logger.LogInformation("Admin user created successfully via /create-admin endpoint with ID: {Id}", adminUser.Id);
+            await db.Database.ExecuteSqlRawAsync(
+                @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsFrozen"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
+                  VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10})",
+                newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, false, true, false, (string?)null, createdAt);
+            
+            logger.LogInformation("Admin user created successfully via SQL with ID: {Id}", newId);
 
             return Results.Ok(new { 
                 message = "Admin user created successfully",
                 created = true,
-                id = adminUser.Id,
+                id = newId,
                 username = "admin",
                 email = "admin@maskbrowser.com",
                 password = "Admin123!"
@@ -243,19 +248,22 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
             // If it's a unique constraint violation, try to find and update existing user
             if (errorDetails.Contains("unique") || errorDetails.Contains("duplicate"))
             {
-                var existingUser = await db.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
-                if (existingUser != null)
+                var existingUserId = await db.Database.SqlQueryRaw<int>(
+                    "SELECT \"Id\" FROM \"Users\" WHERE \"Username\" = 'admin' OR \"Email\" = 'admin@maskbrowser.com' LIMIT 1"
+                ).FirstOrDefaultAsync();
+                    
+                if (existingUserId > 0)
                 {
-                    existingUser.IsActive = true;
-                    existingUser.IsAdmin = true;
-                    existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
-                    await db.SaveChangesAsync();
+                    var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+                    await db.Database.ExecuteSqlRawAsync(
+                        "UPDATE \"Users\" SET \"IsActive\" = true, \"IsAdmin\" = true, \"PasswordHash\" = {0} WHERE \"Id\" = {1}",
+                        passwordHash, existingUserId);
                     
                     return Results.Ok(new { 
                         message = "Admin user found and updated",
                         created = false,
                         updated = true,
-                        id = existingUser.Id,
+                        id = existingUserId,
                         username = "admin",
                         email = "admin@maskbrowser.com",
                         password = "Admin123!"

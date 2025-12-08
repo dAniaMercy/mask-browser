@@ -28,7 +28,7 @@
                                 @Model.Stats.TotalUsers
                             </div>
                             <div class="text-xs text-muted mt-1">
-                                <span class="text-success">+@Model.Stats.NewUsersToday</span> today
+                                <span class="text-success">@Model.Stats.ActiveUsers active</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -76,7 +76,7 @@
                                 $@Model.Stats.TotalRevenue.ToString("N2")
                             </div>
                             <div class="text-xs text-muted mt-1">
-                                <span class="text-success">$@Model.Stats.RevenueToday.ToString("N2")</span> today
+                                <span class="text-success">$@Model.Stats.MonthlyRevenue.ToString("N2")</span> this month
                             </div>
                         </div>
                         <div class="col-auto">
@@ -237,8 +237,8 @@
                                     <h6 class="mb-1">@activity.Action</h6>
                                     <small class="text-muted">@activity.Timestamp.ToString("HH:mm")</small>
                                 </div>
-                                <p class="mb-1">@activity.Description</p>
-                                <small class="text-muted">@activity.Username</small>
+                                <p class="mb-1">@activity.Details</p>
+                                <small class="text-muted">@activity.User</small>
                             </div>
                         }
                     </div>
@@ -292,10 +292,10 @@
                                         </td>
                                         <td>
                                             <div class="progress" style="height: 20px;">
-                                                <div class="progress-bar @(server.ContainerUsagePercent > 80 ? "bg-danger" : server.ContainerUsagePercent > 60 ? "bg-warning" : "bg-success")"
+                                                <div class="progress-bar @(server.LoadPercentage > 80 ? "bg-danger" : server.LoadPercentage > 60 ? "bg-warning" : "bg-success")"
                                                      role="progressbar"
-                                                     style="width: @server.ContainerUsagePercent%"
-                                                     aria-valuenow="@server.ContainerUsagePercent"
+                                                     style="width: @server.LoadPercentage%"
+                                                     aria-valuenow="@server.LoadPercentage"
                                                      aria-valuemin="0"
                                                      aria-valuemax="100">
                                                     @server.ActiveContainers / @server.MaxContainers
@@ -314,26 +314,7 @@
                                         </td>
                                         <td>
                                             <small class="text-muted">
-                                                @if (server.LastHealthCheck.HasValue)
-                                                {
-                                                    var timeAgo = DateTime.UtcNow - server.LastHealthCheck.Value;
-                                                    if (timeAgo.TotalMinutes < 1)
-                                                    {
-                                                        <span>@((int)timeAgo.TotalSeconds)s ago</span>
-                                                    }
-                                                    else if (timeAgo.TotalHours < 1)
-                                                    {
-                                                        <span>@((int)timeAgo.TotalMinutes)m ago</span>
-                                                    }
-                                                    else
-                                                    {
-                                                        <span>@((int)timeAgo.TotalHours)h ago</span>
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    <span>Never</span>
-                                                }
+                                                <span>Active</span>
                                             </small>
                                         </td>
                                     </tr>
@@ -457,7 +438,7 @@
             data: {
                 labels: ['Running', 'Stopped', 'Error'],
                 datasets: [{
-                    data: [@Model.Stats.ActiveProfiles, @(Model.Stats.TotalProfiles - Model.Stats.ActiveProfiles - Model.Stats.ErrorProfiles), @Model.Stats.ErrorProfiles],
+                    data: [@Model.Stats.ActiveProfiles, @(Model.Stats.TotalProfiles - Model.Stats.ActiveProfiles), 0],
                     backgroundColor: [
                         'rgba(28, 200, 138, 0.8)',
                         'rgba(224, 224, 224, 0.8)',

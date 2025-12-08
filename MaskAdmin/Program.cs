@@ -305,9 +305,9 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
         try
         {
             await db.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
+                @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"")
                   VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, true, false, null, createdAt);
+                newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, true, false, DBNull.Value, createdAt);
             
             logger.LogInformation("Admin user created successfully via SQL with ID: {Id}", newId);
 

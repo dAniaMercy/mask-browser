@@ -34,14 +34,22 @@ public class LogsController : Controller
     {
         try
         {
+            LogCategory? categoryEnum = null;
+            if (!string.IsNullOrEmpty(category) && Enum.TryParse<LogCategory>(category, out var parsedCategory))
+                categoryEnum = parsedCategory;
+
+            AuditLogLevel? levelEnum = null;
+            if (!string.IsNullOrEmpty(level) && Enum.TryParse<AuditLogLevel>(level, out var parsedLevel))
+                levelEnum = parsedLevel;
+
             var (logs, totalCount) = await _logService.GetLogsAsync(
                 page,
                 pageSize,
-                search,
-                category,
-                level,
+                categoryEnum,
+                levelEnum,
                 dateFrom,
-                dateTo);
+                dateTo,
+                search);
 
             var model = (
                 Logs: logs,
@@ -87,14 +95,22 @@ public class LogsController : Controller
         try
         {
             // Get all matching logs (no pagination for export)
+            LogCategory? categoryEnum = null;
+            if (!string.IsNullOrEmpty(category) && Enum.TryParse<LogCategory>(category, out var parsedCategory))
+                categoryEnum = parsedCategory;
+
+            AuditLogLevel? levelEnum = null;
+            if (!string.IsNullOrEmpty(level) && Enum.TryParse<AuditLogLevel>(level, out var parsedLevel))
+                levelEnum = parsedLevel;
+
             var (logs, _) = await _logService.GetLogsAsync(
                 page: 1,
                 pageSize: 100000, // Large number to get all
-                search,
-                category,
-                level,
+                categoryEnum,
+                levelEnum,
                 dateFrom,
-                dateTo);
+                dateTo,
+                search);
 
             // Convert to export format
             var exportData = logs.Select(log => new
@@ -117,15 +133,21 @@ public class LogsController : Controller
             string fileName;
             string contentType;
 
+            var headers = new[] {
+                "Timestamp", "Level", "Category", "User", "Action",
+                "Entity", "EntityId", "IpAddress", "UserAgent",
+                "OldValues", "NewValues", "AdditionalData"
+            };
+
             if (format.ToLower() == "excel")
             {
-                fileBytes = await _exportService.ExportToExcelAsync(exportData, "AuditLogs");
+                fileBytes = await _exportService.ExportToExcelAsync(exportData, "AuditLogs", headers);
                 fileName = $"AuditLogs_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             }
             else
             {
-                fileBytes = await _exportService.ExportToCsvAsync(exportData);
+                fileBytes = await _exportService.ExportToCsvAsync(exportData, headers);
                 fileName = $"AuditLogs_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
                 contentType = "text/csv";
             }
@@ -148,11 +170,11 @@ public class LogsController : Controller
             var (logs, totalCount) = await _logService.GetLogsAsync(
                 page,
                 pageSize,
-                search: null,
                 category: null,
                 level: null,
-                dateFrom: null,
-                dateTo: null);
+                from: null,
+                to: null,
+                search: null);
 
             // Filter by user (this should be done in the service, but for now...)
             logs = logs.Where(l => l.UserId == userId).ToList();

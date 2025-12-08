@@ -192,10 +192,10 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
         if (adminId > 0)
         {
             // Update existing admin using direct SQL to avoid IsBanned
-            var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+            var adminPasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
             await db.Database.ExecuteSqlRawAsync(
                 "UPDATE \"Users\" SET \"IsActive\" = true, \"IsAdmin\" = true, \"PasswordHash\" = {0} WHERE \"Id\" = {1}",
-                passwordHash, adminId);
+                adminPasswordHash, adminId);
             
             logger.LogInformation("Admin user updated via SQL, ID: {Id}", adminId);
             
@@ -225,7 +225,7 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
             await db.Database.ExecuteSqlRawAsync(
                 @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
                   VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
-                newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, true, false, (string?)null, createdAt);
+                newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, true, false, null, createdAt);
             
             logger.LogInformation("Admin user created successfully via SQL with ID: {Id}", newId);
 
@@ -254,10 +254,10 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
                     
                 if (existingUserId > 0)
                 {
-                    var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+                    var updatePasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
                     await db.Database.ExecuteSqlRawAsync(
                         "UPDATE \"Users\" SET \"IsActive\" = true, \"IsAdmin\" = true, \"PasswordHash\" = {0} WHERE \"Id\" = {1}",
-                        passwordHash, existingUserId);
+                        updatePasswordHash, existingUserId);
                     
                     return Results.Ok(new { 
                         message = "Admin user found and updated",

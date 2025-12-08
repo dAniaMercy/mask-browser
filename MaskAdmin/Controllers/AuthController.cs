@@ -190,7 +190,6 @@ public class AuthController : Controller
         }
     }
 
-    [Authorize]
     [HttpPost]
     public async Task<IActionResult> Logout()
     {

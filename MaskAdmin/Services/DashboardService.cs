@@ -65,7 +65,7 @@ public class DashboardService : IDashboardService
         var stats = new DashboardStats
         {
             TotalUsers = await _context.Users.CountAsync(),
-            ActiveUsers = await _context.Users.CountAsync(u => u.IsActive && !u.IsBanned),
+            ActiveUsers = await _context.Users.CountAsync(u => u.IsActive),
             TotalProfiles = await _context.BrowserProfiles.CountAsync(),
             ActiveProfiles = await _context.BrowserProfiles.CountAsync(p => p.Status == ProfileStatus.Running),
             TotalServers = await _context.ServerNodes.CountAsync(),

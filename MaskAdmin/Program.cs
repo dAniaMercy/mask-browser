@@ -1,4 +1,5 @@
 using MaskAdmin.Data;
+using MaskAdmin.Models;
 using MaskAdmin.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -183,7 +184,7 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
             return Results.Ok(new { message = "Admin user already exists", created = false });
         }
 
-        var adminUser = new Models.User
+        var adminUser = new User
         {
             Username = "admin",
             Email = "admin@maskbrowser.com",

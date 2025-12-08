@@ -11,7 +11,29 @@ using MaskAdmin.Data;
 using Microsoft.EntityFrameworkCore;
 using BCrypt.Net;
 
+// Helper class for login query
+public class LoginUserData
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsAdmin { get; set; }
+}
+
 namespace MaskAdmin.Controllers;
+
+// Helper class for login query (without IsBanned column)
+public class LoginUserData
+{
+    public int Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string PasswordHash { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public bool IsAdmin { get; set; }
+}
 
 [AllowAnonymous]
 public class AuthController : Controller
@@ -122,10 +144,13 @@ public class AuthController : Controller
                 return View();
             }
 
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Username == username || u.Email == username);
+            // Use SQL to load user data without IsBanned column
+            var userData = await _context.Database.SqlQueryRaw<LoginUserData>(
+                "SELECT \"Id\", \"Username\", \"Email\", \"PasswordHash\", \"IsActive\", \"IsAdmin\" FROM \"Users\" WHERE \"Username\" = {0} OR \"Email\" = {1} LIMIT 1",
+                username, username
+            ).FirstOrDefaultAsync();
 
-            if (user == null)
+            if (userData == null)
             {
                 _logger.LogWarning("User not found: {Username}", username);
                 ViewData["Error"] = "Invalid username or password";
@@ -137,7 +162,7 @@ public class AuthController : Controller
             bool passwordValid = false;
             try
             {
-                passwordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+                passwordValid = BCrypt.Net.BCrypt.Verify(password, userData.PasswordHash);
             }
             catch (Exception bcryptEx)
             {
@@ -155,7 +180,7 @@ public class AuthController : Controller
                 return View();
             }
 
-            if (!user.IsActive)
+            if (!userData.IsActive)
             {
                 _logger.LogWarning("Login attempt for inactive user: {Username}", username);
                 ViewData["Error"] = "Account is disabled";
@@ -163,12 +188,13 @@ public class AuthController : Controller
                 return View();
             }
 
-            // Update last login
+            // Update last login using SQL
             try
             {
-                user.LastLoginAt = DateTime.UtcNow;
-                user.LastLoginIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-                await _context.SaveChangesAsync();
+                var lastLoginIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE \"Users\" SET \"LastLoginAt\" = {0}, \"LastLoginIp\" = {1} WHERE \"Id\" = {2}",
+                    DateTime.UtcNow, lastLoginIp ?? (object)DBNull.Value, userData.Id);
             }
             catch (Exception saveEx)
             {
@@ -180,7 +206,15 @@ public class AuthController : Controller
             string token;
             try
             {
-                token = GenerateJwtToken(user);
+                // Create a temporary user object for token generation
+                var tempUser = new Models.User
+                {
+                    Id = userData.Id,
+                    Username = userData.Username,
+                    Email = userData.Email,
+                    IsAdmin = userData.IsAdmin
+                };
+                token = GenerateJwtToken(tempUser);
             }
             catch (Exception tokenEx)
             {
@@ -201,7 +235,7 @@ public class AuthController : Controller
 
             Response.Cookies.Append("auth_token", token, cookieOptions);
 
-            _logger.LogInformation("User {Username} logged in successfully", user.Username);
+            _logger.LogInformation("User {Username} logged in successfully", userData.Username);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
             {

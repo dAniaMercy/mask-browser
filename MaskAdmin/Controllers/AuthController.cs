@@ -34,6 +34,36 @@ public class AuthController : Controller
     public IActionResult Login(string? returnUrl = null)
     {
         ViewData["ReturnUrl"] = returnUrl;
+        
+        // Check if admin user exists, create if not
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var adminExists = await _context.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+                if (!adminExists)
+                {
+                    _logger.LogWarning("Admin user not found, creating default admin user");
+                    var adminUser = new Models.User
+                    {
+                        Username = "admin",
+                        Email = "admin@maskbrowser.com",
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+                        IsActive = true,
+                        IsAdmin = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Users.Add(adminUser);
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Default admin user created successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking/creating admin user");
+            }
+        });
+        
         return View();
     }
 
@@ -43,6 +73,8 @@ public class AuthController : Controller
     {
         try
         {
+            _logger.LogInformation("Login attempt for username: {Username}", username);
+
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             {
                 ViewData["Error"] = "Username and password are required";
@@ -50,12 +82,47 @@ public class AuthController : Controller
                 return View();
             }
 
+            // Check database connection
+            try
+            {
+                await _context.Database.CanConnectAsync();
+            }
+            catch (Exception dbEx)
+            {
+                _logger.LogError(dbEx, "Database connection failed during login");
+                ViewData["Error"] = "Database connection error. Please contact administrator.";
+                ViewData["ReturnUrl"] = returnUrl;
+                return View();
+            }
+
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Username == username || u.Email == username);
 
-            if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            if (user == null)
             {
-                _logger.LogWarning("Failed login attempt for username: {Username}", username);
+                _logger.LogWarning("User not found: {Username}", username);
+                ViewData["Error"] = "Invalid username or password";
+                ViewData["ReturnUrl"] = returnUrl;
+                return View();
+            }
+
+            // Verify password
+            bool passwordValid = false;
+            try
+            {
+                passwordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
+            }
+            catch (Exception bcryptEx)
+            {
+                _logger.LogError(bcryptEx, "BCrypt verification error for user: {Username}", username);
+                ViewData["Error"] = "Password verification error. Please contact administrator.";
+                ViewData["ReturnUrl"] = returnUrl;
+                return View();
+            }
+
+            if (!passwordValid)
+            {
+                _logger.LogWarning("Invalid password for user: {Username}", username);
                 ViewData["Error"] = "Invalid username or password";
                 ViewData["ReturnUrl"] = returnUrl;
                 return View();
@@ -63,18 +130,38 @@ public class AuthController : Controller
 
             if (!user.IsActive)
             {
+                _logger.LogWarning("Login attempt for inactive user: {Username}", username);
                 ViewData["Error"] = "Account is disabled";
                 ViewData["ReturnUrl"] = returnUrl;
                 return View();
             }
 
             // Update last login
-            user.LastLoginAt = DateTime.UtcNow;
-            user.LastLoginIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _context.SaveChangesAsync();
+            try
+            {
+                user.LastLoginAt = DateTime.UtcNow;
+                user.LastLoginIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception saveEx)
+            {
+                _logger.LogWarning(saveEx, "Failed to update last login for user: {Username}", username);
+                // Continue anyway, this is not critical
+            }
 
             // Create JWT token
-            var token = GenerateJwtToken(user);
+            string token;
+            try
+            {
+                token = GenerateJwtToken(user);
+            }
+            catch (Exception tokenEx)
+            {
+                _logger.LogError(tokenEx, "Failed to generate JWT token for user: {Username}", username);
+                ViewData["Error"] = "Authentication token error. Please contact administrator.";
+                ViewData["ReturnUrl"] = returnUrl;
+                return View();
+            }
 
             // Set cookie with token
             var cookieOptions = new CookieOptions
@@ -98,8 +185,8 @@ public class AuthController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during login");
-            ViewData["Error"] = "An error occurred during login. Please try again.";
+            _logger.LogError(ex, "Unexpected error during login for username: {Username}", username);
+            ViewData["Error"] = $"An error occurred during login: {ex.Message}";
             ViewData["ReturnUrl"] = returnUrl;
             return View();
         }

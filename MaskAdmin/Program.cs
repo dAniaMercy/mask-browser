@@ -152,6 +152,25 @@ app.MapMetrics();
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
+// Admin user check endpoint (for debugging)
+app.MapGet("/check-admin", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        var adminExists = await db.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+        var userCount = await db.Users.CountAsync();
+        return Results.Ok(new { 
+            adminExists, 
+            userCount,
+            canConnect = await db.Database.CanConnectAsync()
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+});
+
 // Database migration on startup (optional, remove in production)
 using (var scope = app.Services.CreateScope())
 {

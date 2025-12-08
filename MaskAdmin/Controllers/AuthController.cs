@@ -38,22 +38,52 @@ public class AuthController : Controller
         // Check if admin user exists, create if not
         try
         {
-            var adminExists = await _context.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
-            if (!adminExists)
+            var existingAdmin = await _context.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+            if (existingAdmin == null)
             {
                 _logger.LogWarning("Admin user not found, creating default admin user");
+                
+                // Get next available ID
+                var maxId = await _context.Users.AnyAsync() 
+                    ? await _context.Users.MaxAsync(u => (int?)u.Id) ?? 0 
+                    : 0;
+                
                 var adminUser = new Models.User
                 {
+                    Id = maxId + 1,
                     Username = "admin",
                     Email = "admin@maskbrowser.com",
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
                     IsActive = true,
                     IsAdmin = true,
+                    IsBanned = false,
+                    IsFrozen = false,
+                    Balance = 0,
                     CreatedAt = DateTime.UtcNow
                 };
-                _context.Users.Add(adminUser);
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Default admin user created successfully");
+                
+                try
+                {
+                    _context.Users.Add(adminUser);
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Default admin user created successfully with ID: {Id}", adminUser.Id);
+                }
+                catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                {
+                    _logger.LogWarning(dbEx, "Failed to create admin user, may already exist. Error: {Error}", dbEx.InnerException?.Message ?? dbEx.Message);
+                    // Continue anyway, user can be created via /create-admin endpoint
+                }
+            }
+            else
+            {
+                // Ensure admin user has correct permissions
+                if (!existingAdmin.IsAdmin || !existingAdmin.IsActive)
+                {
+                    existingAdmin.IsAdmin = true;
+                    existingAdmin.IsActive = true;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Updated existing admin user permissions");
+                }
             }
         }
         catch (Exception ex)

@@ -178,39 +178,99 @@ app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> lo
 {
     try
     {
-        var adminExists = await db.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
-        if (adminExists)
+        // Check if admin already exists
+        var existingAdmin = await db.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+        if (existingAdmin != null)
         {
-            return Results.Ok(new { message = "Admin user already exists", created = false });
+            // Update existing admin to ensure it's active and has admin rights
+            existingAdmin.IsActive = true;
+            existingAdmin.IsAdmin = true;
+            existingAdmin.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+            await db.SaveChangesAsync();
+            
+            return Results.Ok(new { 
+                message = "Admin user already exists, password reset to default",
+                created = false,
+                updated = true,
+                username = "admin",
+                email = "admin@maskbrowser.com",
+                password = "Admin123!"
+            });
         }
 
+        // Check for ID conflicts (seed data might have created user with ID=1)
+        var maxId = await db.Users.AnyAsync() 
+            ? await db.Users.MaxAsync(u => (int?)u.Id) ?? 0 
+            : 0;
+        
         var adminUser = new User
         {
+            Id = maxId + 1, // Use next available ID
             Username = "admin",
             Email = "admin@maskbrowser.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
             IsActive = true,
             IsAdmin = true,
+            IsBanned = false,
+            IsFrozen = false,
+            Balance = 0,
             CreatedAt = DateTime.UtcNow
         };
 
         db.Users.Add(adminUser);
-        await db.SaveChangesAsync();
+        
+        try
+        {
+            await db.SaveChangesAsync();
+            logger.LogInformation("Admin user created successfully via /create-admin endpoint with ID: {Id}", adminUser.Id);
 
-        logger.LogInformation("Admin user created successfully via /create-admin endpoint");
-
-        return Results.Ok(new { 
-            message = "Admin user created successfully",
-            created = true,
-            username = "admin",
-            email = "admin@maskbrowser.com",
-            password = "Admin123!"
-        });
+            return Results.Ok(new { 
+                message = "Admin user created successfully",
+                created = true,
+                id = adminUser.Id,
+                username = "admin",
+                email = "admin@maskbrowser.com",
+                password = "Admin123!"
+            });
+        }
+        catch (DbUpdateException dbEx)
+        {
+            logger.LogError(dbEx, "Database error creating admin user. Inner exception: {InnerException}", dbEx.InnerException?.Message);
+            
+            // Try to get more details
+            var errorDetails = dbEx.InnerException?.Message ?? dbEx.Message;
+            
+            // If it's a unique constraint violation, try to find and update existing user
+            if (errorDetails.Contains("unique") || errorDetails.Contains("duplicate"))
+            {
+                var existingUser = await db.Users.FirstOrDefaultAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+                if (existingUser != null)
+                {
+                    existingUser.IsActive = true;
+                    existingUser.IsAdmin = true;
+                    existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+                    await db.SaveChangesAsync();
+                    
+                    return Results.Ok(new { 
+                        message = "Admin user found and updated",
+                        created = false,
+                        updated = true,
+                        id = existingUser.Id,
+                        username = "admin",
+                        email = "admin@maskbrowser.com",
+                        password = "Admin123!"
+                    });
+                }
+            }
+            
+            return Results.Problem($"Database error: {errorDetails}");
+        }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error creating admin user");
-        return Results.Problem($"Error: {ex.Message}");
+        logger.LogError(ex, "Unexpected error creating admin user. Exception: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+            ex.GetType().Name, ex.Message, ex.StackTrace);
+        return Results.Problem($"Error: {ex.Message}. Inner: {ex.InnerException?.Message}");
     }
 });
 

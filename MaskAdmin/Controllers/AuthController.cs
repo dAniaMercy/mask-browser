@@ -134,10 +134,21 @@ public class AuthController : Controller
             }
 
             // Use SQL to load user data without IsBanned column
-            var userData = await _context.Database.SqlQueryRaw<LoginUserData>(
-                "SELECT \"Id\", \"Username\", \"Email\", \"PasswordHash\", \"IsActive\", \"IsAdmin\" FROM \"Users\" WHERE \"Username\" = {0} OR \"Email\" = {1} LIMIT 1",
-                username, username
-            ).FirstOrDefaultAsync();
+            LoginUserData? userData = null;
+            try
+            {
+                userData = await _context.Database.SqlQueryRaw<LoginUserData>(
+                    "SELECT \"Id\", \"Username\", \"Email\", \"PasswordHash\", \"IsActive\", \"IsAdmin\" FROM \"Users\" WHERE \"Username\" = {0} OR \"Email\" = {1} LIMIT 1",
+                    username, username
+                ).FirstOrDefaultAsync();
+            }
+            catch (Exception sqlEx)
+            {
+                _logger.LogError(sqlEx, "SQL error loading user: {Username}. Error: {Error}", username, sqlEx.Message);
+                ViewData["Error"] = "Database error. Please contact administrator.";
+                ViewData["ReturnUrl"] = returnUrl;
+                return View();
+            }
 
             if (userData == null)
             {
@@ -154,6 +165,10 @@ public class AuthController : Controller
                     {
                         _logger.LogWarning("Admin user does not exist. Please create it via /create-admin endpoint or SQL.");
                     }
+                    else
+                    {
+                        _logger.LogWarning("Admin user exists with ID: {Id}, but query returned null. Possible SQL mapping issue.", adminId);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -165,18 +180,34 @@ public class AuthController : Controller
                 return View();
             }
             
-            _logger.LogInformation("User found: {Username}, ID: {Id}, IsActive: {IsActive}, IsAdmin: {IsAdmin}", 
-                userData.Username, userData.Id, userData.IsActive, userData.IsAdmin);
+            _logger.LogInformation("User found: {Username}, ID: {Id}, IsActive: {IsActive}, IsAdmin: {IsAdmin}, PasswordHash length: {HashLength}", 
+                userData.Username, userData.Id, userData.IsActive, userData.IsAdmin, userData.PasswordHash?.Length ?? 0);
 
             // Verify password
             bool passwordValid = false;
             try
             {
+                if (string.IsNullOrEmpty(userData.PasswordHash))
+                {
+                    _logger.LogError("PasswordHash is null or empty for user: {Username}", username);
+                    ViewData["Error"] = "Password verification error. Please contact administrator.";
+                    ViewData["ReturnUrl"] = returnUrl;
+                    return View();
+                }
+                
+                _logger.LogInformation("Verifying password for user: {Username}, Hash prefix: {HashPrefix}", 
+                    username, userData.PasswordHash.Substring(0, Math.Min(20, userData.PasswordHash.Length)));
+                
                 passwordValid = BCrypt.Net.BCrypt.Verify(password, userData.PasswordHash);
+                
+                _logger.LogInformation("Password verification result for user: {Username}: {Result}", username, passwordValid);
             }
             catch (Exception bcryptEx)
             {
-                _logger.LogError(bcryptEx, "BCrypt verification error for user: {Username}", username);
+                _logger.LogError(bcryptEx, "BCrypt verification error for user: {Username}. Hash: {HashPrefix}, Error: {Error}", 
+                    username, 
+                    userData.PasswordHash?.Substring(0, Math.Min(20, userData.PasswordHash.Length)) ?? "null",
+                    bcryptEx.Message);
                 ViewData["Error"] = "Password verification error. Please contact administrator.";
                 ViewData["ReturnUrl"] = returnUrl;
                 return View();
@@ -184,7 +215,8 @@ public class AuthController : Controller
 
             if (!passwordValid)
             {
-                _logger.LogWarning("Invalid password for user: {Username}", username);
+                _logger.LogWarning("Invalid password for user: {Username}. Provided password length: {PwdLength}", 
+                    username, password?.Length ?? 0);
                 ViewData["Error"] = "Invalid username or password";
                 ViewData["ReturnUrl"] = returnUrl;
                 return View();

@@ -83,9 +83,9 @@ public class AuthController : Controller
                 try
                 {
                     await _context.Database.ExecuteSqlRawAsync(
-                        @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsFrozen"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
-                          VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10})",
-                        newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, false, true, false, (string?)null, createdAt);
+                        @"INSERT INTO ""Users"" (""Id"", ""Username"", ""Email"", ""PasswordHash"", ""Balance"", ""IsActive"", ""IsAdmin"", ""TwoFactorEnabled"", ""TwoFactorSecret"", ""CreatedAt"") 
+                          VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+                        newId, "admin", "admin@maskbrowser.com", passwordHash, 0, true, true, false, (string?)null, createdAt);
                     
                     _logger.LogInformation("Default admin user created successfully via SQL with ID: {Id}", newId);
                 }

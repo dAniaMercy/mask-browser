@@ -41,6 +41,10 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.Username).IsUnique();
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => e.LastLoginAt);
+            
+            // Ignore columns that don't exist in database
+            entity.Ignore(e => e.IsBanned);
+            entity.Ignore(e => e.IsFrozen);
         });
 
         // Subscription configuration

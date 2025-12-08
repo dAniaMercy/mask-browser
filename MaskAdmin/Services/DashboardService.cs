@@ -125,8 +125,10 @@ public class DashboardService : IDashboardService
     public async Task<List<ChartDataPoint>> GetUsersChartDataAsync(int days = 7)
     {
         var startDate = DateTime.UtcNow.AddDays(-days).Date;
+        // Use Select to only load CreatedAt to avoid IsBanned column
         var data = await _context.Users
             .Where(u => u.CreatedAt >= startDate)
+            .Select(u => new { u.CreatedAt })
             .GroupBy(u => u.CreatedAt.Date)
             .Select(g => new ChartDataPoint
             {
@@ -205,13 +207,9 @@ public class DashboardService : IDashboardService
 
     private async Task<List<TopUser>> GetTopUsersAsync(int count)
     {
+        // Use Select to avoid loading IsBanned column
         return await _context.Users
-            .Include(u => u.BrowserProfiles)
-            .Include(u => u.Subscription)
-            .Include(u => u.Payments)
             .Where(u => u.IsActive)
-            .OrderByDescending(u => u.BrowserProfiles.Count)
-            .Take(count)
             .Select(u => new TopUser
             {
                 UserId = u.Id,
@@ -222,6 +220,8 @@ public class DashboardService : IDashboardService
                 TotalSpent = u.Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.Amount),
                 SubscriptionTier = u.Subscription != null ? u.Subscription.Tier.ToString() : "Free"
             })
+            .OrderByDescending(u => u.ProfileCount)
+            .Take(count)
             .ToListAsync();
     }
 

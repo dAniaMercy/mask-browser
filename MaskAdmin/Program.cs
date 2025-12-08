@@ -177,6 +177,40 @@ app.MapGet("/check-admin", async (ApplicationDbContext db) =>
     }
 });
 
+// Reset admin password endpoint
+app.MapPost("/reset-admin-password", async (ApplicationDbContext db, ILogger<Program> logger) =>
+{
+    try
+    {
+        var adminId = await db.Database.SqlQueryRaw<int>(
+            "SELECT \"Id\" FROM \"Users\" WHERE \"Username\" = 'admin' OR \"Email\" = 'admin@maskbrowser.com' LIMIT 1"
+        ).FirstOrDefaultAsync();
+        
+        if (adminId == 0)
+        {
+            return Results.Problem("Admin user not found. Use /create-admin to create it.");
+        }
+        
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Users\" SET \"PasswordHash\" = {0}, \"IsActive\" = true, \"IsAdmin\" = true WHERE \"Id\" = {1}",
+            passwordHash, adminId);
+        
+        logger.LogInformation("Admin password reset, ID: {Id}", adminId);
+        
+        return Results.Ok(new { 
+            message = "Admin password reset to 'Admin123!'",
+            id = adminId,
+            username = "admin"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error resetting admin password");
+        return Results.Problem($"Error: {ex.Message}");
+    }
+});
+
 // Create admin user endpoint
 app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> logger) =>
 {

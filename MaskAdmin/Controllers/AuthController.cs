@@ -141,11 +141,32 @@ public class AuthController : Controller
 
             if (userData == null)
             {
-                _logger.LogWarning("User not found: {Username}", username);
+                _logger.LogWarning("User not found: {Username}. Checking if admin user exists...", username);
+                
+                // Try to create admin user if it doesn't exist
+                try
+                {
+                    var adminId = await _context.Database.SqlQueryRaw<int>(
+                        "SELECT \"Id\" FROM \"Users\" WHERE \"Username\" = 'admin' OR \"Email\" = 'admin@maskbrowser.com' LIMIT 1"
+                    ).FirstOrDefaultAsync();
+                    
+                    if (adminId == 0)
+                    {
+                        _logger.LogWarning("Admin user does not exist. Please create it via /create-admin endpoint or SQL.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error checking admin user existence");
+                }
+                
                 ViewData["Error"] = "Invalid username or password";
                 ViewData["ReturnUrl"] = returnUrl;
                 return View();
             }
+            
+            _logger.LogInformation("User found: {Username}, ID: {Id}, IsActive: {IsActive}, IsAdmin: {IsAdmin}", 
+                userData.Username, userData.Id, userData.IsActive, userData.IsAdmin);
 
             // Verify password
             bool passwordValid = false;

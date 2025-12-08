@@ -1,0 +1,35 @@
+# Пример использования cryptobot-listener в docker-compose
+# Этот файл показывает, как сервис интегрирован в основной docker-compose.yml
+
+version: '3.8'
+
+services:
+  cryptobot-listener:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maskbrowser-cryptobot
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://maskuser:maskpass123@postgres:5432/maskbrowser
+      - REDIS_URL=redis://redis:6379
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - MAIN_API_WEBHOOK_URL=http://api:8080/api/deposit/webhook/cryptobot
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+    volumes:
+      - cryptobot_sessions:/app/sessions
+    networks:
+      - maskbrowser-network
+    depends_on:
+      - postgres
+      - redis
+      - api
+
+volumes:
+  cryptobot_sessions:
+
+networks:
+  maskbrowser-network:
+    external: true

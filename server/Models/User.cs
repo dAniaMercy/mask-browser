@@ -6,6 +6,7 @@ public class User
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+    public decimal Balance { get; set; } = 0;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
     public bool IsActive { get; set; } = true;
@@ -20,5 +21,6 @@ public class User
     public List<BrowserProfile> BrowserProfiles { get; set; } = new();
     public Subscription? Subscription { get; set; }
     public List<Payment> Payments { get; set; } = new();
+    public List<DepositRequest> DepositRequests { get; set; } = new();
 }
 

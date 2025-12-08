@@ -120,6 +120,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<LoadBalancerService>();
 builder.Services.AddScoped<CryptoPaymentService>();
+builder.Services.AddScoped<IDepositService, DepositService>();
 builder.Services.AddSingleton<IMetricsService, MetricsService>();
 builder.Services.AddScoped<CyberneticsApiService>();
 
@@ -199,6 +200,10 @@ using (var scope = app.Services.CreateScope())
 // ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
 app.UseCors("AllowFrontend");
 
+// Разрешаем неавторизованные запросы для некоторых endpoints (они проверяют авторизацию вручную)
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Логирование входящих запросов
 app.Use(async (context, next) =>
 {
@@ -225,9 +230,7 @@ app.UseSwaggerUI(options =>
     options.EnableTryItOutByDefault();
 });
 
-app.UseAuthentication();
-app.UseAuthorization();
-
+// Authentication и Authorization уже применены выше
 app.MapControllers();
 
 // Health check endpoint

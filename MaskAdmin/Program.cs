@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Prometheus;
 using Serilog;
 using System.Text;
+using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -128,6 +129,9 @@ app.MapHub<NotificationHub>("/notificationHub");
 
 // Prometheus metrics endpoint
 app.MapMetrics();
+
+// Health check endpoint
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 // Database migration on startup (optional, remove in production)
 using (var scope = app.Services.CreateScope())

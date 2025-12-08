@@ -137,6 +137,9 @@ services:
       - ServerIP=109.172.101.73
       - Cloudflare__Enabled=true
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - Webhooks__cryptobot__Secret=${WEBHOOK_SECRET:-super_secret_webhook}
+      - Webhooks__cryptobot__Enabled=true
+      - ASPNETCORE_URLS=http://+:8080
     ports:
       - "5050:8080"
     volumes:
@@ -181,6 +184,48 @@ services:
       retries: 3
     labels:
       - "com.docker.compose.service=web"
+      - "logging=promtail"
+
+  # MaskAdmin - Admin Panel
+  maskadmin:
+    build:
+      context: ./MaskAdmin
+      dockerfile: Dockerfile
+    container_name: maskbrowser-maskadmin
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123;Pooling=true;Maximum Pool Size=100
+      - ConnectionStrings__Redis=redis:6379
+      - JwtSettings__SecretKey=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production-min-32-chars}
+      - JwtSettings__Issuer=MaskAdmin
+      - JwtSettings__Audience=MaskAdmin
+      - JwtSettings__ExpirationMinutes=480
+      - MaskBrowserAPI__BaseUrl=http://api:8080
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__MaskAdmin=Information
+    ports:
+      - "5100:80"
+    volumes:
+      - ./logs/maskadmin:/app/logs
+    networks:
+      - maskbrowser-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "com.docker.compose.service=maskadmin"
       - "logging=promtail"
 
   # Agent Service (Browser Container Manager)
@@ -360,6 +405,7 @@ volumes:
   alertmanager_data:
   api_logs:
   agent_logs:
+  cryptobot_sessions:
 
 networks:
   maskbrowser-network:

@@ -137,6 +137,8 @@ services:
       - ServerIP=109.172.101.73
       - Cloudflare__Enabled=true
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - Webhooks__cryptobot__Secret=${WEBHOOK_SECRET:-super_secret_webhook}
+      - Webhooks__cryptobot__Enabled=true
       # Важно: логирование
       - Logging__LogLevel__Default=Information
       - Logging__LogLevel__MaskBrowser=Information
@@ -186,6 +188,87 @@ services:
       retries: 3
     labels:
       - "com.docker.compose.service=web"
+      - "logging=promtail"
+
+  # MaskAdmin - Admin Panel
+  maskadmin:
+    build:
+      context: ../MaskAdmin
+      dockerfile: Dockerfile
+    container_name: maskbrowser-maskadmin
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__PostgreSQL=Host=postgres;Port=5432;Database=maskbrowser;Username=maskuser;Password=maskpass123;Pooling=true;Maximum Pool Size=100
+      - ConnectionStrings__Redis=redis:6379
+      - JwtSettings__SecretKey=${JWT_SECRET_KEY:-your-super-secret-jwt-key-change-in-production-min-32-chars}
+      - JwtSettings__Issuer=MaskAdmin
+      - JwtSettings__Audience=MaskAdmin
+      - JwtSettings__ExpirationMinutes=480
+      - MaskBrowserAPI__BaseUrl=http://api:8080
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__MaskAdmin=Information
+    ports:
+      - "5100:80"
+    volumes:
+      - ./logs/maskadmin:/app/logs
+    networks:
+      - maskbrowser-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "com.docker.compose.service=maskadmin"
+      - "logging=promtail"
+
+  # CryptoBot listener (Telethon + FastAPI webhook)
+  cryptobot-listener:
+    build:
+      context: ../cryptobot-listener
+      dockerfile: Dockerfile
+    container_name: maskbrowser-cryptobot
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://maskuser:maskpass123@postgres:5432/maskbrowser
+      - REDIS_URL=redis://redis:6379
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID:-}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH:-}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE:-}
+      - CRYPTOBOT_API_TOKEN=${CRYPTOBOT_API_TOKEN:-}
+      - MAIN_API_WEBHOOK_URL=http://api:8080/api/deposit/webhook/cryptobot
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-super_secret_webhook}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SESSION_DIR=/app/sessions
+    volumes:
+      - cryptobot_sessions:/app/sessions
+    networks:
+      - maskbrowser-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[p]ython.*app.main' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "com.docker.compose.service=cryptobot-listener"
       - "logging=promtail"
 
   # Agent Service (Browser Container Manager)
@@ -365,6 +448,7 @@ volumes:
   alertmanager_data:
   api_logs:
   agent_logs:
+  cryptobot_sessions:
 
 networks:
   maskbrowser-network:

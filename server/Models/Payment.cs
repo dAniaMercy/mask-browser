@@ -11,6 +11,10 @@ public class Payment
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAt { get; set; }
+    public int? DepositRequestId { get; set; }
+    public int? PaymentMethodId { get; set; }
+    public string? ProcessorTransactionId { get; set; }
+    public string? ProcessorResponse { get; set; }
 
     // Navigation property
     public User User { get; set; } = null!;

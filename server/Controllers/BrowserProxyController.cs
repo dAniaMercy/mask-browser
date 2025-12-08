@@ -85,7 +85,34 @@ public class BrowserProxyController : ControllerBase
     {
         try
         {
-            var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "0");
+            // Проверяем авторизацию
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int userId;
+            
+            // Если пользователь не авторизован через стандартный механизм, проверяем токен из заголовка
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                var authHeader = Request.Headers["Authorization"].ToString();
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+                {
+                    _logger.LogWarning("Unauthorized request to proxy endpoint for profile {ProfileId}", profileId);
+                    return Unauthorized(new { message = "Unauthorized" });
+                }
+                
+                var token = authHeader.Substring(7); // Убираем "Bearer "
+                var userIdFromToken = ValidateTokenAndGetUserId(token);
+                if (userIdFromToken == null)
+                {
+                    _logger.LogWarning("Invalid token in proxy request for profile {ProfileId}", profileId);
+                    return Unauthorized(new { message = "Invalid token" });
+                }
+                userId = userIdFromToken.Value;
+                _logger.LogInformation("✅ Authenticated via token from header for user {UserId}", userId);
+            }
+            else
+            {
+                userId = int.Parse(userIdClaim);
+            }
             
             var profile = await _context.BrowserProfiles
                 .FirstOrDefaultAsync(p => p.Id == profileId && p.UserId == userId);

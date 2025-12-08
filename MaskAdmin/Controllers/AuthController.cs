@@ -11,17 +11,6 @@ using MaskAdmin.Data;
 using Microsoft.EntityFrameworkCore;
 using BCrypt.Net;
 
-// Helper class for login query
-public class LoginUserData
-{
-    public int Id { get; set; }
-    public string Username { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string PasswordHash { get; set; } = string.Empty;
-    public bool IsActive { get; set; }
-    public bool IsAdmin { get; set; }
-}
-
 namespace MaskAdmin.Controllers;
 
 // Helper class for login query (without IsBanned column)

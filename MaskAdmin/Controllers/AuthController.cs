@@ -31,38 +31,36 @@ public class AuthController : Controller
     }
 
     [HttpGet]
-    public IActionResult Login(string? returnUrl = null)
+    public async Task<IActionResult> Login(string? returnUrl = null)
     {
         ViewData["ReturnUrl"] = returnUrl;
         
         // Check if admin user exists, create if not
-        _ = Task.Run(async () =>
+        try
         {
-            try
+            var adminExists = await _context.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+            if (!adminExists)
             {
-                var adminExists = await _context.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
-                if (!adminExists)
+                _logger.LogWarning("Admin user not found, creating default admin user");
+                var adminUser = new Models.User
                 {
-                    _logger.LogWarning("Admin user not found, creating default admin user");
-                    var adminUser = new Models.User
-                    {
-                        Username = "admin",
-                        Email = "admin@maskbrowser.com",
-                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
-                        IsActive = true,
-                        IsAdmin = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Users.Add(adminUser);
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Default admin user created successfully");
-                }
+                    Username = "admin",
+                    Email = "admin@maskbrowser.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+                    IsActive = true,
+                    IsAdmin = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Users.Add(adminUser);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Default admin user created successfully");
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error checking/creating admin user");
-            }
-        });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking/creating admin user");
+            // Continue anyway, user can be created via /create-admin endpoint
+        }
         
         return View();
     }

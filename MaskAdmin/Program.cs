@@ -7,6 +7,7 @@ using Prometheus;
 using Serilog;
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -167,6 +168,47 @@ app.MapGet("/check-admin", async (ApplicationDbContext db) =>
     }
     catch (Exception ex)
     {
+        return Results.Problem($"Error: {ex.Message}");
+    }
+});
+
+// Create admin user endpoint
+app.MapPost("/create-admin", async (ApplicationDbContext db, ILogger<Program> logger) =>
+{
+    try
+    {
+        var adminExists = await db.Users.AnyAsync(u => u.Username == "admin" || u.Email == "admin@maskbrowser.com");
+        if (adminExists)
+        {
+            return Results.Ok(new { message = "Admin user already exists", created = false });
+        }
+
+        var adminUser = new Models.User
+        {
+            Username = "admin",
+            Email = "admin@maskbrowser.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+            IsActive = true,
+            IsAdmin = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        db.Users.Add(adminUser);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Admin user created successfully via /create-admin endpoint");
+
+        return Results.Ok(new { 
+            message = "Admin user created successfully",
+            created = true,
+            username = "admin",
+            email = "admin@maskbrowser.com",
+            password = "Admin123!"
+        });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error creating admin user");
         return Results.Problem($"Error: {ex.Message}");
     }
 });

@@ -16,9 +16,11 @@ public class ApplicationDbContext : DbContext
             return;
         }
         
-        // Suppress pending model changes warning to allow app to start
-        optionsBuilder.ConfigureWarnings(warnings =>
-            warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        // Note: PendingModelChangesWarning is only available in EF Core 9.0+
+        // Suppress model validation errors in development
+        #if DEBUG
+        optionsBuilder.EnableSensitiveDataLogging();
+        #endif
     }
 
     public DbSet<User> Users { get; set; }

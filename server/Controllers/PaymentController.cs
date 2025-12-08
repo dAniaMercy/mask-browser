@@ -23,6 +23,10 @@ public class PaymentController : ControllerBase
     [HttpPost("verify/cryptobot")]
     public async Task<IActionResult> VerifyCryptoBotPayment([FromBody] VerifyPaymentRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.InvoiceId))
+        {
+            return BadRequest(new { error = "InvoiceId is required" });
+        }
         var result = await _cryptoPaymentService.VerifyCryptoBotPaymentAsync(request.InvoiceId);
         return Ok(new { verified = result });
     }
@@ -30,6 +34,10 @@ public class PaymentController : ControllerBase
     [HttpPost("verify/bybit")]
     public async Task<IActionResult> VerifyBybitPayment([FromBody] VerifyPaymentRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.OrderId))
+        {
+            return BadRequest(new { error = "OrderId is required" });
+        }
         var result = await _cryptoPaymentService.VerifyBybitPaymentAsync(request.OrderId);
         return Ok(new { verified = result });
     }

@@ -219,7 +219,6 @@ public class DepositService : IDepositService
                 TransactionId = transactionId ?? string.Empty,
                 Status = PaymentStatus.Completed,
                 CompletedAt = DateTime.UtcNow,
-                Description = $"Deposit via {deposit.PaymentMethod?.Name ?? processorType}",
                 ProcessorResponse = response,
                 ProcessorTransactionId = transactionId,
                 PaymentMethodId = deposit.PaymentMethodId,

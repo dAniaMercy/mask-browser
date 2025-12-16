@@ -125,6 +125,9 @@ app.UseHttpMetrics();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Subscription limits middleware (after authentication)
+app.UseSubscriptionLimits();
+
 app.UseSession();
 
 app.MapControllerRoute(

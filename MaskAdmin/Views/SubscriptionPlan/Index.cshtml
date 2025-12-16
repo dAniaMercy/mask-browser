@@ -1,0 +1,172 @@
+@model List<MaskAdmin.Models.SubscriptionPlan>
+
+@{
+    ViewData["Title"] = "Subscription Plans";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Subscription Plans</h1>
+        <a asp-action="Create" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Create New Plan
+        </a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        @foreach (var plan in Model.OrderBy(p => p.SortOrder))
+        {
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100 @(plan.IsPopular ? "border-primary" : "")">
+                    @if (plan.IsPopular)
+                    {
+                        <div class="card-header bg-primary text-white text-center">
+                            <i class="bi bi-star-fill"></i> Most Popular
+                        </div>
+                    }
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="card-title mb-1">@plan.Name</h5>
+                                <span class="badge bg-@(plan.Tier switch {
+                                    SubscriptionTier.Free => "secondary",
+                                    SubscriptionTier.Starter => "info",
+                                    SubscriptionTier.Pro => "primary",
+                                    SubscriptionTier.Business => "warning",
+                                    SubscriptionTier.Enterprise => "danger",
+                                    _ => "secondary"
+                                })">@plan.Tier</span>
+                            </div>
+                            <span class="badge bg-@(plan.IsActive ? "success" : "secondary")">
+                                @(plan.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </div>
+
+                        <p class="text-muted small">@plan.Description</p>
+
+                        <div class="mb-3">
+                            <h2 class="h4 mb-0">
+                                $@plan.MonthlyPrice<span class="text-muted small">/month</span>
+                            </h2>
+                            <p class="text-muted small mb-0">
+                                or $@plan.YearlyPrice/year
+                                @if (plan.YearlyPrice > 0 && plan.MonthlyPrice > 0)
+                                {
+                                    var savings = ((plan.MonthlyPrice * 12 - plan.YearlyPrice) / (plan.MonthlyPrice * 12) * 100);
+                                    <span class="text-success">(Save @savings.ToString("F0")%)</span>
+                                }
+                            </p>
+                        </div>
+
+                        <hr>
+
+                        <ul class="list-unstyled mb-3">
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success"></i>
+                                <strong>@plan.MaxProfiles</strong> Browser Profiles
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success"></i>
+                                <strong>@plan.MaxTeamMembers</strong> Team Members
+                            </li>
+                            <li class="mb-2">
+                                <i class="bi bi-check-circle-fill text-success"></i>
+                                <strong>@plan.StorageGB GB</strong> Storage
+                            </li>
+                            @if (plan.AdvancedFingerprintsEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Advanced Fingerprints
+                                </li>
+                            }
+                            @if (plan.CloudProfilesEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Cloud Profiles
+                                </li>
+                            }
+                            @if (plan.TeamCollaborationEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Team Collaboration
+                                </li>
+                            }
+                            @if (plan.PrioritySupport)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Priority Support
+                                </li>
+                            }
+                            @if (plan.ApiAccessEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    API Access (@plan.ApiRequestsPerDay.ToString("N0") requests/day)
+                                </li>
+                            }
+                            @if (plan.CustomBrandingEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Custom Branding
+                                </li>
+                            }
+                            @if (plan.DedicatedAccountManagerEnabled)
+                            {
+                                <li class="mb-2">
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    Dedicated Account Manager
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <div class="btn-group w-100" role="group">
+                            <a asp-action="Details" asp-route-id="@plan.Id" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                            <a asp-action="Edit" asp-route-id="@plan.Id" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-pencil"></i> Edit
+                            </a>
+                            @if (plan.IsActive)
+                            {
+                                <form asp-action="Delete" asp-route-id="@plan.Id" method="post" class="d-inline"
+                                      onsubmit="return confirm('Are you sure you want to deactivate this plan?');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        <i class="bi bi-x-circle"></i> Deactivate
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+.card.border-primary {
+    box-shadow: 0 0 20px rgba(13, 110, 253, 0.3);
+}
+</style>

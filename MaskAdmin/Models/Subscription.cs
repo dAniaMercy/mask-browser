@@ -13,7 +13,14 @@ public class Subscription
     [ForeignKey(nameof(UserId))]
     public virtual User User { get; set; } = null!;
 
+    public int? PlanId { get; set; }
+
+    [ForeignKey(nameof(PlanId))]
+    public virtual SubscriptionPlan? Plan { get; set; }
+
     public SubscriptionTier Tier { get; set; } = SubscriptionTier.Free;
+
+    public BillingCycle BillingCycle { get; set; } = BillingCycle.Monthly;
 
     public int MaxProfiles { get; set; } = 1;
 
@@ -30,6 +37,23 @@ public class Subscription
 
     public DateTime? NextBillingDate { get; set; }
 
+    public int? PaymentId { get; set; }
+
+    [ForeignKey(nameof(PaymentId))]
+    public virtual Payment? LastPayment { get; set; }
+
+    [MaxLength(200)]
+    public string? StripeSubscriptionId { get; set; }
+
+    [MaxLength(200)]
+    public string? StripeCustomerId { get; set; }
+
+    public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
+
+    public DateTime? CancelledAt { get; set; }
+
+    public DateTime? TrialEndsAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
@@ -38,8 +62,25 @@ public class Subscription
 public enum SubscriptionTier
 {
     Free = 0,
-    Basic = 1,
+    Starter = 1,
     Pro = 2,
-    Enterprise = 3,
-    Custom = 4
+    Business = 3,
+    Enterprise = 4
+}
+
+public enum BillingCycle
+{
+    Monthly = 0,
+    Yearly = 1,
+    Lifetime = 2
+}
+
+public enum SubscriptionStatus
+{
+    Active = 0,
+    PastDue = 1,
+    Cancelled = 2,
+    Expired = 3,
+    Trial = 4,
+    Suspended = 5
 }

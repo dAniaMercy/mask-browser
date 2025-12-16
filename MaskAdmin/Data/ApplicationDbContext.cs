@@ -25,6 +25,8 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<Subscription> Subscriptions { get; set; }
+    public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+    public DbSet<PlanFeature> PlanFeatures { get; set; }
     public DbSet<BrowserProfile> BrowserProfiles { get; set; }
     public DbSet<ServerNode> ServerNodes { get; set; }
     public DbSet<Payment> Payments { get; set; }
@@ -57,6 +59,25 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.UserId).IsUnique();
             entity.HasIndex(e => e.EndDate);
             entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.StripeSubscriptionId);
+        });
+
+        // SubscriptionPlan configuration
+        modelBuilder.Entity<SubscriptionPlan>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Tier).IsUnique();
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.SortOrder);
+        });
+
+        // PlanFeature configuration
+        modelBuilder.Entity<PlanFeature>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.PlanId);
+            entity.HasIndex(e => e.SortOrder);
         });
 
         // BrowserProfile configuration
@@ -126,16 +147,116 @@ public class ApplicationDbContext : DbContext
             CreatedAt = DateTime.UtcNow
         });
 
+        // Default subscription plans
+        modelBuilder.Entity<SubscriptionPlan>().HasData(
+            new SubscriptionPlan
+            {
+                Id = 1,
+                Tier = SubscriptionTier.Free,
+                Name = "Free",
+                Description = "Perfect for trying out MaskBrowser",
+                MonthlyPrice = 0,
+                YearlyPrice = 0,
+                MaxProfiles = 1,
+                MaxTeamMembers = 1,
+                StorageGB = 5,
+                IsActive = true,
+                SortOrder = 0
+            },
+            new SubscriptionPlan
+            {
+                Id = 2,
+                Tier = SubscriptionTier.Starter,
+                Name = "Starter",
+                Description = "Great for freelancers and small projects",
+                MonthlyPrice = 9.99m,
+                YearlyPrice = 99.99m,
+                MaxProfiles = 5,
+                MaxTeamMembers = 1,
+                StorageGB = 20,
+                AdvancedFingerprintsEnabled = true,
+                IsActive = true,
+                IsPopular = false,
+                SortOrder = 1
+            },
+            new SubscriptionPlan
+            {
+                Id = 3,
+                Tier = SubscriptionTier.Pro,
+                Name = "Pro",
+                Description = "For professionals managing multiple accounts",
+                MonthlyPrice = 29.99m,
+                YearlyPrice = 299.99m,
+                MaxProfiles = 20,
+                MaxTeamMembers = 3,
+                CloudProfilesEnabled = true,
+                TeamCollaborationEnabled = true,
+                PrioritySupport = true,
+                AdvancedFingerprintsEnabled = true,
+                ApiAccessEnabled = true,
+                ApiRequestsPerDay = 10000,
+                StorageGB = 100,
+                IsActive = true,
+                IsPopular = true,
+                SortOrder = 2
+            },
+            new SubscriptionPlan
+            {
+                Id = 4,
+                Tier = SubscriptionTier.Business,
+                Name = "Business",
+                Description = "For teams and growing businesses",
+                MonthlyPrice = 99.99m,
+                YearlyPrice = 999.99m,
+                MaxProfiles = 100,
+                MaxTeamMembers = 10,
+                CloudProfilesEnabled = true,
+                TeamCollaborationEnabled = true,
+                PrioritySupport = true,
+                AdvancedFingerprintsEnabled = true,
+                ApiAccessEnabled = true,
+                ApiRequestsPerDay = 100000,
+                CustomBrandingEnabled = true,
+                StorageGB = 500,
+                IsActive = true,
+                SortOrder = 3
+            },
+            new SubscriptionPlan
+            {
+                Id = 5,
+                Tier = SubscriptionTier.Enterprise,
+                Name = "Enterprise",
+                Description = "Custom solutions for large organizations",
+                MonthlyPrice = 299.99m,
+                YearlyPrice = 2999.99m,
+                MaxProfiles = 1000,
+                MaxTeamMembers = 50,
+                CloudProfilesEnabled = true,
+                TeamCollaborationEnabled = true,
+                PrioritySupport = true,
+                AdvancedFingerprintsEnabled = true,
+                ApiAccessEnabled = true,
+                ApiRequestsPerDay = 1000000,
+                CustomBrandingEnabled = true,
+                DedicatedAccountManagerEnabled = true,
+                StorageGB = 2000,
+                IsActive = true,
+                SortOrder = 4
+            }
+        );
+
         // Default subscription for admin
         modelBuilder.Entity<Subscription>().HasData(new Subscription
         {
             Id = 1,
             UserId = 1,
+            PlanId = 5,
             Tier = SubscriptionTier.Enterprise,
             MaxProfiles = 1000,
             Price = 0,
             IsActive = true,
-            StartDate = DateTime.UtcNow
+            StartDate = DateTime.UtcNow,
+            Status = SubscriptionStatus.Active
         });
 
         // Default system settings

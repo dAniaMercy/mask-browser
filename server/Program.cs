@@ -161,14 +161,52 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(
-                "http://109.172.101.73:5052",
+                // Production domains
+                "https://maskbrowser.ru",
+                "https://www.maskbrowser.ru",
+                "https://admin.maskbrowser.ru",
+                // Development
                 "http://localhost:5052",
                 "http://localhost:3000",
+                "http://localhost:5100",
+                // IP access (for development/testing)
+                "http://109.172.101.73:5052",
                 "https://109.172.101.73"
             )
-              .AllowAnyMethod()
-            .AllowAnyHeader()
+            .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+            .WithHeaders("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin")
             .AllowCredentials(); // ВАЖНО: для работы с credentials: 'include'
+    });
+});
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    // Rate limit для API endpoints
+    options.AddFixedWindowLimiter("api", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 100;
+        opt.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 10;
+    });
+
+    // Более строгий лимит для auth endpoints
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 10;
+        opt.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 5;
+    });
+
+    // Лимит для создания профилей
+    options.AddFixedWindowLimiter("profile-creation", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(5);
+        opt.PermitLimit = 5;
+        opt.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 2;
     });
 });
 
@@ -199,6 +237,9 @@ using (var scope = app.Services.CreateScope())
 
 // ВАЖНО: CORS должен быть ДО UseAuthentication и UseAuthorization
 app.UseCors("AllowFrontend");
+
+// Rate Limiting
+app.UseRateLimiter();
 
 // Разрешаем неавторизованные запросы для некоторых endpoints (они проверяют авторизацию вручную)
 app.UseAuthentication();

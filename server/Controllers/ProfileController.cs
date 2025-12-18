@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MaskBrowser.Server.Models;
 using MaskBrowser.Server.Services;
 
@@ -80,6 +81,7 @@ public class ProfileController : ControllerBase
     }
 
     [HttpPost]
+    [EnableRateLimiting("profile-creation")]
     public async Task<IActionResult> CreateProfile([FromBody] CreateProfileRequest request)
     {
         try

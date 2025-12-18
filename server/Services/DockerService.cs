@@ -1,6 +1,8 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using Docker.DotNet.BasicAuth;
 using MaskBrowser.Server.Models;
+using MaskBrowser.Server.Services.Models;
 using System.Text.Json;
 using System.Threading;
 
@@ -11,11 +13,13 @@ public class DockerService
     private readonly DockerClient _dockerClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DockerService> _logger;
+    private readonly IMetricsService? _metricsService;
 
-    public DockerService(IConfiguration configuration, ILogger<DockerService> logger)
+    public DockerService(IConfiguration configuration, ILogger<DockerService> logger, IMetricsService? metricsService = null)
 {
     _configuration = configuration;
     _logger = logger;
+    _metricsService = metricsService;
 
     string? socketPath = _configuration["Docker:SocketPath"] ?? Environment.GetEnvironmentVariable("DOCKER_HOST");
 
@@ -51,11 +55,12 @@ public class DockerService
 
     public async Task<string> CreateBrowserContainerAsync(int profileId, BrowserConfig config, string nodeIp)
     {
+        var startTime = DateTime.UtcNow;
         try
         {
             var containerName = $"maskbrowser-profile-{profileId}";
-            var randomPort = new Random().Next(10000, 65535);
-            var randomVncPort = new Random().Next(10000, 65535);
+            var randomPort = await GetAvailablePortAsync(10000, 65535);
+            var randomVncPort = await GetAvailablePortAsync(10000, 65535);
             var imageName = _configuration["Docker:BrowserImage"] ?? "maskbrowser/browser:latest";
             var networkName = _configuration["Docker:NetworkName"] ?? "maskbrowser-network";
 
@@ -251,7 +256,11 @@ public class DockerService
             {
                 _logger.LogInformation("📦 Calling Docker API to create container...");
                 using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2)); // 2 минуты таймаут
-                response = await _dockerClient.Containers.CreateContainerAsync(createParams, cts.Token);
+                response = await RetryDockerOperationAsync(
+                    async () => await _dockerClient.Containers.CreateContainerAsync(createParams, cts.Token),
+                    maxRetries: 3,
+                    operationName: "create container"
+                );
                 _logger.LogInformation("✅ Container created: {ContainerId} for profile {ProfileId}", response.ID, profileId);
             }
             catch (DockerApiException ex)
@@ -279,7 +288,11 @@ public class DockerService
             {
                 _logger.LogInformation("🚀 Starting container {ContainerId}...", response.ID);
                 using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1)); // 1 минута таймаут
-                await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters(), cts.Token);
+                await RetryDockerOperationAsync(
+                    async () => await _dockerClient.Containers.StartContainerAsync(response.ID, new ContainerStartParameters(), cts.Token),
+                    maxRetries: 3,
+                    operationName: "start container"
+                );
                 _logger.LogInformation("✅ Container started: {ContainerId}", response.ID);
             }
             catch (DockerApiException ex)
@@ -289,8 +302,12 @@ public class DockerService
                 try
                 {
                     await _dockerClient.Containers.RemoveContainerAsync(response.ID, new ContainerRemoveParameters { Force = true });
+                    _logger.LogInformation("🧹 Cleaned up failed container {ContainerId}", response.ID);
                 }
-                catch { }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "⚠️ Failed to cleanup container {ContainerId} after start failure", response.ID);
+                }
                 throw new InvalidOperationException($"Failed to start Docker container: {ex.ResponseBody}", ex);
             }
             catch (TaskCanceledException ex)
@@ -300,8 +317,12 @@ public class DockerService
                 try
                 {
                     await _dockerClient.Containers.RemoveContainerAsync(response.ID, new ContainerRemoveParameters { Force = true });
+                    _logger.LogInformation("🧹 Cleaned up timed-out container {ContainerId}", response.ID);
                 }
-                catch { }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "⚠️ Failed to cleanup container {ContainerId} after timeout", response.ID);
+                }
                 throw new InvalidOperationException("Timeout starting Docker container", ex);
             }
 
@@ -309,7 +330,19 @@ public class DockerService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to create browser container for profile {ProfileId}: {Error}", profileId, ex.Message);
+            // Метрика неудачного создания
+            _metricsService?.IncrementContainerCreationFailed();
+            
+            _logger.LogError(ex, 
+                "❌ Failed to create browser container for profile {ProfileId} on node {NodeIp}. " +
+                "Image: {Image}, Network: {Network}, Config: {Config}. " +
+                "Error: {Error}",
+                profileId,
+                nodeIp,
+                imageName,
+                networkName,
+                System.Text.Json.JsonSerializer.Serialize(config),
+                ex.Message);
             throw;
         }
     }
@@ -350,18 +383,44 @@ public class DockerService
 
     public async Task DeleteContainerAsync(string containerId)
     {
+        // Пытаемся остановить контейнер перед удалением
         try
         {
-            await _dockerClient.Containers.StopContainerAsync(containerId, new ContainerStopParameters());
+            var container = await _dockerClient.Containers.InspectContainerAsync(containerId);
+            if (container.State.Running)
+            {
+                _logger.LogInformation("🛑 Stopping container {ContainerId} before deletion...", containerId);
+                await StopContainerAsync(containerId);
+            }
         }
-        catch { }
+        catch (DockerContainerNotFoundException)
+        {
+            _logger.LogInformation("Container {ContainerId} not found, may already be deleted", containerId);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ Failed to stop container {ContainerId} before deletion, continuing with force removal", containerId);
+        }
 
-        await _dockerClient.Containers.RemoveContainerAsync(
-            containerId,
-            new ContainerRemoveParameters { Force = true }
-        );
-
-        _logger.LogInformation("Container deleted: {ContainerId}", containerId);
+        // Удаляем контейнер
+        try
+        {
+            await _dockerClient.Containers.RemoveContainerAsync(
+                containerId,
+                new ContainerRemoveParameters { Force = true }
+            );
+            _logger.LogInformation("✅ Container deleted: {ContainerId}", containerId);
+        }
+        catch (DockerContainerNotFoundException)
+        {
+            _logger.LogInformation("Container {ContainerId} already deleted", containerId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Failed to delete container {ContainerId}", containerId);
+            throw;
+        }
     }
 
     public async Task<int> GetContainerPortAsync(string containerId)
@@ -410,6 +469,251 @@ public class DockerService
             new ContainersListParameters { All = false }
         );
         return containers.Where(c => c.Names.Any(n => n.Contains("maskbrowser-profile"))).ToList();
+    }
+
+    public async Task<bool> IsContainerHealthyAsync(string containerId)
+    {
+        try
+        {
+            var container = await _dockerClient.Containers.InspectContainerAsync(containerId);
+            
+            // Проверяем, что контейнер запущен
+            if (!container.State.Running)
+            {
+                _logger.LogDebug("Container {ContainerId} is not running", containerId);
+                _metricsService?.IncrementContainerHealthCheck(false);
+                return false;
+            }
+
+            // Проверяем health status, если настроен
+            if (container.State.Health != null)
+            {
+                var healthStatus = container.State.Health.Status;
+                _logger.LogDebug("Container {ContainerId} health status: {Status}", containerId, healthStatus);
+                return healthStatus == "healthy" || healthStatus == "starting";
+            }
+
+            // Если health check не настроен, проверяем, что контейнер запущен достаточно долго
+            // (более 10 секунд - время на инициализацию)
+            if (container.State.StartedAt.HasValue)
+            {
+                var uptime = DateTime.UtcNow - container.State.StartedAt.Value;
+                if (uptime.TotalSeconds < 10)
+                {
+                    _logger.LogDebug("Container {ContainerId} is starting (uptime: {Uptime}s)", containerId, uptime.TotalSeconds);
+                    return false; // Считаем нездоровым, если только что запустился
+                }
+            }
+
+            // Дополнительная проверка: пытаемся подключиться к порту
+            try
+            {
+                var port = await GetContainerPortAsync(containerId);
+                if (port > 0)
+                {
+                    using var client = new System.Net.Http.HttpClient();
+                    client.Timeout = TimeSpan.FromSeconds(2);
+                    var response = await client.GetAsync($"http://localhost:{port}/health", HttpCompletionOption.ResponseHeadersRead);
+                    var isHealthy = response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound;
+                    _logger.LogDebug("Container {ContainerId} port {Port} check: {Status}", containerId, port, isHealthy ? "healthy" : "unhealthy");
+                    return isHealthy;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to check container {ContainerId} port health", containerId);
+                // Не считаем это критичной ошибкой, если контейнер запущен
+            }
+
+            // Если контейнер запущен и нет явных проблем, считаем здоровым
+            _metricsService?.IncrementContainerHealthCheck(true);
+            return true;
+        }
+        catch (DockerContainerNotFoundException)
+        {
+            _logger.LogDebug("Container {ContainerId} not found", containerId);
+            _metricsService?.IncrementContainerHealthCheck(false);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking container {ContainerId} health", containerId);
+            _metricsService?.IncrementContainerHealthCheck(false);
+            return false;
+        }
+    }
+
+    public async Task<ContainerHealthStatus> GetContainerHealthStatusAsync(string containerId)
+    {
+        try
+        {
+            var container = await _dockerClient.Containers.InspectContainerAsync(containerId);
+            
+            return new ContainerHealthStatus
+            {
+                ContainerId = containerId,
+                IsRunning = container.State.Running,
+                Status = container.State.Status,
+                HealthStatus = container.State.Health?.Status ?? "unknown",
+                StartedAt = container.State.StartedAt,
+                Uptime = container.State.StartedAt.HasValue 
+                    ? DateTime.UtcNow - container.State.StartedAt.Value 
+                    : TimeSpan.Zero,
+                Port = await GetContainerPortAsync(containerId),
+                ExitCode = container.State.ExitCode
+            };
+        }
+        catch (DockerContainerNotFoundException)
+        {
+            return new ContainerHealthStatus
+            {
+                ContainerId = containerId,
+                IsRunning = false,
+                Status = "not found"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting container {ContainerId} health status", containerId);
+            return new ContainerHealthStatus
+            {
+                ContainerId = containerId,
+                IsRunning = false,
+                Status = "error"
+            };
+        }
+    }
+
+    private async Task<int> GetAvailablePortAsync(int minPort = 10000, int maxPort = 65535)
+    {
+        var random = new Random();
+        var attempts = 0;
+        const int maxAttempts = 100;
+
+        while (attempts < maxAttempts)
+        {
+            var port = random.Next(minPort, maxPort);
+            
+            // Проверяем, используется ли порт
+            if (IsPortAvailable(port))
+            {
+                // Дополнительная проверка: нет ли контейнера с таким портом
+                var containers = await _dockerClient.Containers.ListContainersAsync(
+                    new ContainersListParameters { All = true });
+                
+                var portInUse = containers.Any(c =>
+                {
+                    if (c.Ports == null) return false;
+                    return c.Ports.Any(p => p.PublicPort == port);
+                });
+
+                if (!portInUse)
+                {
+                    _logger.LogDebug("✅ Found available port: {Port}", port);
+                    return port;
+                }
+            }
+
+            attempts++;
+        }
+
+        _logger.LogError("❌ Failed to find available port after {Attempts} attempts", maxAttempts);
+        throw new InvalidOperationException($"No available ports found in range {minPort}-{maxPort}");
+    }
+
+    private bool IsPortAvailable(int port)
+    {
+        try
+        {
+            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, port);
+            listener.Start();
+            listener.Stop();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<T> RetryDockerOperationAsync<T>(
+        Func<Task<T>> operation,
+        int maxRetries = 3,
+        string operationName = "Docker operation")
+    {
+        var attempt = 0;
+        Exception? lastException = null;
+
+        while (attempt < maxRetries)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (DockerApiException ex) when (attempt < maxRetries - 1)
+            {
+                // Повторяем только для временных ошибок (5xx, network issues)
+                var isRetryable = ex.StatusCode >= System.Net.HttpStatusCode.InternalServerError ||
+                                 ex.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
+                                 ex.StatusCode == System.Net.HttpStatusCode.GatewayTimeout ||
+                                 ex.ResponseBody?.Contains("connection") == true ||
+                                 ex.ResponseBody?.Contains("timeout") == true;
+
+                if (isRetryable)
+                {
+                    attempt++;
+                    lastException = ex;
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // Exponential backoff
+                    _logger.LogWarning(ex, 
+                        "⚠️ {OperationName} failed (attempt {Attempt}/{MaxRetries}), retrying in {Delay}s...", 
+                        operationName, attempt, maxRetries, delay.TotalSeconds);
+                    
+                    // Метрика retry попытки
+                    _metricsService?.IncrementDockerRetryAttempts(operationName);
+                    
+                    await Task.Delay(delay);
+                    continue;
+                }
+
+                // Не повторяем для критичных ошибок
+                throw;
+            }
+            catch (TaskCanceledException ex) when (attempt < maxRetries - 1)
+            {
+                attempt++;
+                lastException = ex;
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                _logger.LogWarning(ex, 
+                    "⚠️ {OperationName} timed out (attempt {Attempt}/{MaxRetries}), retrying in {Delay}s...", 
+                    operationName, attempt, maxRetries, delay.TotalSeconds);
+                
+                // Метрика retry попытки
+                _metricsService?.IncrementDockerRetryAttempts(operationName);
+                
+                await Task.Delay(delay);
+                continue;
+            }
+        }
+
+        // Все попытки исчерпаны
+        _logger.LogError(lastException, 
+            "❌ {OperationName} failed after {MaxRetries} attempts", 
+            operationName, maxRetries);
+        throw new InvalidOperationException(
+            $"{operationName} failed after {maxRetries} attempts", 
+            lastException);
+    }
+
+    private async Task RetryDockerOperationAsync(
+        Func<Task> operation,
+        int maxRetries = 3,
+        string operationName = "Docker operation")
+    {
+        await RetryDockerOperationAsync(async () =>
+        {
+            await operation();
+            return true;
+        }, maxRetries, operationName);
     }
 
     private async Task EnsureNetworkExistsAsync(string networkName)

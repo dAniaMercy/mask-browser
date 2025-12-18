@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using MaskBrowser.Server.Models;
 using MaskBrowser.Server.Services;
@@ -24,7 +25,8 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
 {
     try
     {
@@ -100,6 +102,7 @@ public async Task<IActionResult> Register([FromBody] RegisterRequest request)
 
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         _logger.LogInformation("Login attempt: Email={Email}", request?.Email ?? "null");

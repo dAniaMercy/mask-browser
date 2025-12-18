@@ -14,6 +14,7 @@ public class ProfileService
     private readonly KafkaService _kafkaService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ProfileService> _logger;
+    private readonly IMetricsService _metricsService;
 
     public ProfileService(
         ApplicationDbContext context,
@@ -22,7 +23,8 @@ public class ProfileService
         RabbitMQService rabbitMQ,
         KafkaService kafkaService,
         IConfiguration configuration,
-        ILogger<ProfileService> logger)
+        ILogger<ProfileService> logger,
+        IMetricsService metricsService)
     {
         _context = context;
         _dockerService = dockerService;
@@ -31,6 +33,7 @@ public class ProfileService
         _kafkaService = kafkaService;
         _configuration = configuration;
         _logger = logger;
+        _metricsService = metricsService;
     }
 
     public async Task<List<BrowserProfile>> GetUserProfilesAsync(int userId)
@@ -124,21 +127,36 @@ public class ProfileService
             if (config == null)
             {
                 _logger.LogWarning("⚠️ Config is null, creating default");
-                config = new BrowserConfig
-                {
-                    UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    ScreenResolution = "1920x1080",
-                    Timezone = "UTC",
-                    Language = "en-US",
-                    WebRTC = false,
-                    Canvas = false,
-                    WebGL = false
-                };
+                config = BrowserConfigValidator.GetDefaultConfig();
             }
 
-            _logger.LogInformation("🔧 Config: UA={UA}, Resolution={Res}", 
+            // Валидация конфигурации профиля
+            var validationResult = BrowserConfigValidator.Validate(config);
+            if (!validationResult.IsValid)
+            {
+                _logger.LogWarning("❌ Profile config validation failed: {Errors}", 
+                    string.Join(", ", validationResult.Errors));
+                
+                // Метрика для неудачной валидации
+                _metricsService.IncrementProfileValidationFailed();
+                
+                throw new ArgumentException($"Invalid profile configuration: {string.Join(", ", validationResult.Errors)}");
+            }
+
+            if (validationResult.Warnings.Any())
+            {
+                _logger.LogInformation("⚠️ Profile config warnings: {Warnings}", 
+                    string.Join(", ", validationResult.Warnings));
+            }
+
+            _logger.LogInformation("🔧 Config: UA={UA}, Resolution={Res}, Timezone={TZ}, Language={Lang}, WebRTC={WebRTC}, Canvas={Canvas}, WebGL={WebGL}", 
                 config.UserAgent?.Substring(0, Math.Min(50, config.UserAgent.Length)), 
-                config.ScreenResolution);
+                config.ScreenResolution,
+                config.Timezone,
+                config.Language,
+                config.WebRTC,
+                config.Canvas,
+                config.WebGL);
 
             // Создаем профиль
             var profile = new BrowserProfile
@@ -273,9 +291,21 @@ public class ProfileService
 
         _logger.LogInformation("🖥️ Selected node: {NodeIp}", node.IpAddress);
 
-        profile.Status = ProfileStatus.Starting;
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("📝 Profile status set to Starting");
+        // Используем транзакцию для атомарности операций
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            profile.Status = ProfileStatus.Starting;
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            _logger.LogInformation("📝 Profile status set to Starting");
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "❌ Failed to update profile status to Starting");
+            throw;
+        }
 
         try
         {
@@ -289,17 +319,31 @@ public class ProfileService
 
             _logger.LogInformation("✅ Container created: {ContainerId}", containerId);
 
-            profile.ContainerId = containerId;
-            profile.ServerNodeIp = node.IpAddress;
-            profile.Status = ProfileStatus.Running;
-            profile.LastStartedAt = DateTime.UtcNow;
+            // Начинаем новую транзакцию для обновления профиля
+            using var updateTransaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // Перезагружаем профиль и ноду из БД для транзакции
+                profile = await _context.BrowserProfiles.FindAsync(profileId);
+                node = await _context.ServerNodes.FindAsync(node.Id);
+                
+                if (profile == null || node == null)
+                {
+                    throw new InvalidOperationException("Profile or node not found during update");
+                }
 
-            // Get available port
-            profile.Port = await _dockerService.GetContainerPortAsync(containerId);
-            _logger.LogInformation("🔌 Container port: {Port}", profile.Port);
+                profile.ContainerId = containerId;
+                profile.ServerNodeIp = node.IpAddress;
+                profile.Status = ProfileStatus.Running;
+                profile.LastStartedAt = DateTime.UtcNow;
 
-            node.ActiveContainers++;
-            await _context.SaveChangesAsync();
+                // Get available port
+                profile.Port = await _dockerService.GetContainerPortAsync(containerId);
+                _logger.LogInformation("🔌 Container port: {Port}", profile.Port);
+
+                node.ActiveContainers++;
+                await _context.SaveChangesAsync();
+                await updateTransaction.CommitAsync();
 
             // Publish events
             _rabbitMQ.Publish("container.started", new { ProfileId = profileId, ContainerId = containerId });
@@ -313,8 +357,58 @@ public class ProfileService
                 Timestamp = DateTime.UtcNow
             });
 
-            await _kafkaService.PublishContainerLogAsync(containerId, 
-                $"Container {containerId} started for profile {profileId} on node {node.IpAddress}");
+            }
+            catch (Exception ex)
+            {
+                await updateTransaction.RollbackAsync();
+                _logger.LogError(ex, "❌ Failed to update profile in database after container creation");
+                
+                // Очищаем контейнер, если не удалось обновить БД
+                try
+                {
+                    await _dockerService.DeleteContainerAsync(containerId);
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "⚠️ Failed to cleanup container {ContainerId}", containerId);
+                }
+                throw;
+            }
+
+            // Publish events (неблокирующие)
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _rabbitMQ.Publish("container.started", new { ProfileId = profileId, ContainerId = containerId });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️ Failed to publish RabbitMQ event");
+                }
+            });
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _kafkaService.PublishProfileEventAsync("profile-events", new
+                    {
+                        EventType = "ContainerStarted",
+                        ProfileId = profileId,
+                        ContainerId = containerId,
+                        NodeIp = node.IpAddress,
+                        Timestamp = DateTime.UtcNow
+                    });
+
+                    await _kafkaService.PublishContainerLogAsync(containerId, 
+                        $"Container {containerId} started for profile {profileId} on node {node.IpAddress}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️ Failed to publish Kafka event");
+                }
+            });
 
             _logger.LogInformation("✅ Profile {ProfileId} started successfully on {NodeIp}:{Port}", 
                 profileId, node.IpAddress, profile.Port);
@@ -326,7 +420,17 @@ public class ProfileService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Failed to start profile {ProfileId}: {Error}", profileId, ex.Message);
+            _logger.LogError(ex, 
+                "❌ Failed to start profile {ProfileId} for user {UserId} on node {NodeIp}. " +
+                "ContainerId: {ContainerId}, ProfileStatus: {Status}, Config: {Config}. " +
+                "Error: {Error}",
+                profileId, 
+                userId,
+                node?.IpAddress ?? "unknown",
+                profile?.ContainerId ?? "none",
+                profile?.Status.ToString() ?? "unknown",
+                profile != null ? System.Text.Json.JsonSerializer.Serialize(profile.Config) : "null",
+                ex.Message);
             
             // Очищаем контейнер, если он был создан, но не запущен
             if (!string.IsNullOrEmpty(profile.ContainerId))
@@ -335,7 +439,6 @@ public class ProfileService
                 {
                     _logger.LogInformation("🧹 Cleaning up failed container {ContainerId}", profile.ContainerId);
                     await _dockerService.DeleteContainerAsync(profile.ContainerId);
-                    profile.ContainerId = string.Empty;
                 }
                 catch (Exception cleanupEx)
                 {
@@ -343,11 +446,26 @@ public class ProfileService
                 }
             }
             
-            // Сбрасываем статус на Stopped, чтобы можно было попробовать снова
-            profile.Status = ProfileStatus.Stopped;
-            profile.ServerNodeIp = string.Empty;
-            profile.Port = 0;
-            await _context.SaveChangesAsync();
+            // Сбрасываем статус на Stopped в транзакции
+            using var rollbackTransaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                profile = await _context.BrowserProfiles.FindAsync(profileId);
+                if (profile != null)
+                {
+                    profile.Status = ProfileStatus.Stopped;
+                    profile.ServerNodeIp = string.Empty;
+                    profile.Port = 0;
+                    profile.ContainerId = string.Empty;
+                    await _context.SaveChangesAsync();
+                }
+                await rollbackTransaction.CommitAsync();
+            }
+            catch (Exception rollbackEx)
+            {
+                await rollbackTransaction.RollbackAsync();
+                _logger.LogError(rollbackEx, "❌ Failed to rollback profile status");
+            }
             
             return new StartProfileResult 
             { 
